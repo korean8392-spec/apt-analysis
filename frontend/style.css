@@ -102,6 +102,49 @@ main {
 
 .status { min-height: 20px; color: var(--muted); font-size: 13px; margin-bottom: 8px; padding-left: 4px; }
 
+.landing-hero { margin: 8px 0 28px; }
+.hero-copy { text-align: center; padding: 28px 12px 8px; }
+.hero-copy h2 {
+  margin: 0 0 10px;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.hero-copy p {
+  margin: 0 auto;
+  max-width: 480px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.hero-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin-top: 22px;
+}
+.hero-feature {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px 16px;
+  box-shadow: var(--shadow-card);
+}
+.hero-feature-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19px;
+  background: var(--accent-soft);
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+.hero-feature-title { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.hero-feature-desc { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+
 .summary-card {
   display: flex;
   gap: 12px;
@@ -163,6 +206,15 @@ main {
 .quick-check-result .verdict-banner.fair { background: var(--accent-soft); color: var(--accent-dark); }
 .quick-check-result .verdict-banner.high { background: var(--warn-soft); color: #a15c00; }
 .quick-check-result .verdict-detail { font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+
+.verdict-reasons {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.verdict-reasons li { margin-bottom: 2px; }
 
 .pyeong-filter {
   display: flex;

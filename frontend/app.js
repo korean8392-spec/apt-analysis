@@ -4,6 +4,7 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const statusEl = $("#status");
 const resultEl = $("#result");
 const keyWarningEl = $("#key-warning");
+const landingHeroEl = $("#landing-hero");
 
 let currentData = null;
 
@@ -55,27 +56,57 @@ function acquisitionTax(price10k, exclusiveArea) {
   };
 }
 
-function judgementInfo(fairPrice10k, askMin, askMax) {
+function judgementInfo(v, askMin, askMax, householdCnt) {
+  const fairPrice10k = v.fair_price_10k;
   if (!fairPrice10k || (!askMin && !askMax)) return null;
   const ask = askMin && askMax ? (askMin + askMax) / 2 : askMin || askMax;
   const diffPct = ((fairPrice10k - ask) / fairPrice10k) * 100;
+
+  let cls, headline;
   if (diffPct >= 5) {
-    return {
-      cls: "hot-deal",
-      text: `입력한 호가가 추정 적정가 대비 약 ${diffPct.toFixed(1)}% 낮습니다 — 급매 가능성이 있어 보입니다.`,
-    };
-  }
-  if (diffPct >= -3) {
+    cls = "hot-deal";
+    headline = `추정 적정가보다 약 ${diffPct.toFixed(1)}% 낮은 가격 — 데이터상 급매에 가깝습니다.`;
+  } else if (diffPct >= -3) {
+    cls = "fair";
     const sign = diffPct >= 0 ? "-" : "+";
-    return {
-      cls: "fair",
-      text: `입력한 호가가 추정 적정가와 비슷한 수준입니다 (${sign}${Math.abs(diffPct).toFixed(1)}%).`,
-    };
+    headline = `추정 적정가와 비슷한 수준(${sign}${Math.abs(diffPct).toFixed(1)}%) — 무리한 고가도 눈에 띄는 저가도 아닙니다.`;
+  } else {
+    cls = "high";
+    headline = `추정 적정가보다 약 ${Math.abs(diffPct).toFixed(1)}% 높은 가격 — 데이터상 협상 여지를 검토해볼 만합니다.`;
   }
-  return {
-    cls: "high",
-    text: `입력한 호가가 추정 적정가 대비 약 ${Math.abs(diffPct).toFixed(1)}% 높습니다 — 협상 여지를 검토해보세요.`,
-  };
+
+  // 판단의 근거가 된 구체적인 수치를 문장으로 풀어, 왜 이런 결론이 나왔는지 알 수 있게 한다.
+  const reasons = [];
+  reasons.push(`추정 적정가 ${fmtWon(fairPrice10k)} · 입력 호가 ${fmtWon(ask)}`);
+
+  const confLabel = { high: "표본이 충분해 신뢰도가 높은", medium: "표본이 보통 수준인", low: "표본이 적어 신뢰도가 낮은" }[
+    v.confidence
+  ];
+  if (confLabel) {
+    reasons.push(`최근 1년 ${v.sample_count_1y}건 · 3년 ${v.sample_count}건의 실거래로 산출한, ${confLabel} 추정치입니다`);
+  }
+
+  if (householdCnt) {
+    const liquidityLabel =
+      householdCnt >= 1000 ? "대단지라 거래가 비교적 활발한 편입니다" : householdCnt >= 300 ? "중형 단지입니다" : "소규모 단지라 거래량이 적을 수 있습니다";
+    reasons.push(`총 ${householdCnt.toLocaleString()}세대 규모로, ${liquidityLabel}`);
+  }
+
+  if (v.peak_price_10k) {
+    const gapPeak = ((ask - v.peak_price_10k) / v.peak_price_10k) * 100;
+    reasons.push(
+      ask >= v.peak_price_10k
+        ? `입력 호가가 최근 3년 전고점(${fmtWon(v.peak_price_10k)}) 이상입니다`
+        : `최근 3년 전고점(${fmtWon(v.peak_price_10k)}) 대비 약 ${gapPeak.toFixed(1)}% 낮은 가격입니다`
+    );
+  }
+
+  if (v.jeonse_ratio_pct != null) {
+    const gapLabel = v.jeonse_ratio_pct < 50 ? "매매가 대비 갭이 커 투자 목적이라면 자기자본 부담이 큰 편입니다" : "매매가 대비 갭이 상대적으로 작은 편입니다";
+    reasons.push(`전세가율 약 ${v.jeonse_ratio_pct}%로 ${gapLabel}`);
+  }
+
+  return { cls, headline, reasons };
 }
 
 const VERDICT_LABELS = {
@@ -111,26 +142,15 @@ function renderQuickCheck(data) {
       resultBox.innerHTML = `<p class="hint" style="margin:0">호가를 입력하면 매수 판단이 여기 표시됩니다.</p>`;
       return;
     }
-    const info = judgementInfo(v.fair_price_10k, askMin, askMax);
-    const ask = askMin && askMax ? (askMin + askMax) / 2 : askMin || askMax;
-    const details = [`추정 적정가 ${fmtWon(v.fair_price_10k)} · 입력 호가 ${fmtWon(ask)}`];
-    if (v.peak_price_10k) {
-      details.push(
-        ask >= v.peak_price_10k
-          ? "전고점(최근 3년) 이상인 호가입니다."
-          : `전고점 대비 약 ${(((ask - v.peak_price_10k) / v.peak_price_10k) * 100).toFixed(1)}%`
-      );
-    }
-    if (v.jeonse_ratio_pct != null) {
-      details.push(`참고 전세가율 약 ${v.jeonse_ratio_pct}%`);
-    }
+    const householdCnt = data.manual_complex_info?.household_cnt ?? data.basis_info?.household_cnt;
+    const info = judgementInfo(v, askMin, askMax, householdCnt);
     if (!info) {
       resultBox.innerHTML = `<p class="hint" style="margin:0">이 평형은 적정가 추정치가 부족해 판단하기 어렵습니다.</p>`;
       return;
     }
     resultBox.innerHTML = `
-      <div class="verdict-banner ${info.cls}">${VERDICT_LABELS[info.cls]}<br /><span style="font-weight:400">${info.text}</span></div>
-      <div class="verdict-detail">${details.join(" · ")}</div>
+      <div class="verdict-banner ${info.cls}">${VERDICT_LABELS[info.cls]}<br /><span style="font-weight:400">${info.headline}</span></div>
+      <ul class="verdict-reasons">${info.reasons.map((r) => `<li>${r}</li>`).join("")}</ul>
     `;
   }
 
@@ -223,6 +243,7 @@ $("#search-form").addEventListener("submit", async (e) => {
 
   candidateSection.hidden = true;
   resultEl.hidden = true;
+  landingHeroEl.hidden = true;
   statusEl.textContent = "단지 찾는 중...";
 
   try {
@@ -307,8 +328,14 @@ function renderResult(data) {
   const grid = $("#official-info-grid");
   grid.innerHTML = "";
 
+  const subway = data.subway_info;
+  const subwayLabel = subway
+    ? `${subway.station_name}${subway.lines?.length ? ` (${subway.lines.join(", ")})` : ""} · 도보 약 ${subway.walk_minutes}분`
+    : "인근 2km 내 역 없음";
+
   const items = [
     ["주소", basis?.address || info?.address || "-"],
+    ["인근 지하철", subwayLabel],
     ["세대수", manual?.household_cnt ?? basis?.household_cnt ?? "-"],
     ["동수", basis?.dong_cnt ?? "-"],
     ["최고층", basis?.top_floor ?? "-"],
@@ -543,7 +570,8 @@ function renderPyeongList(data) {
     const calcResultEl = node.querySelector(".cost-calc-result");
 
     function refreshJudgement(askMin, askMax) {
-      const info = judgementInfo(v.fair_price_10k, askMin, askMax);
+      const householdCnt = data.manual_complex_info?.household_cnt ?? data.basis_info?.household_cnt;
+      const info = judgementInfo(v, askMin, askMax, householdCnt);
       if (!info) {
         judgementEl.hidden = true;
         judgementEl.className = "judgement-banner";
@@ -551,7 +579,7 @@ function renderPyeongList(data) {
       }
       judgementEl.hidden = false;
       judgementEl.className = `judgement-banner ${info.cls}`;
-      judgementEl.textContent = info.text;
+      judgementEl.innerHTML = `${info.headline}<ul class="verdict-reasons">${info.reasons.map((r) => `<li>${r}</li>`).join("")}</ul>`;
     }
 
     function refreshCostCalc() {

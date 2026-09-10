@@ -3,7 +3,7 @@ from collections import Counter
 
 from config import has_molit_key
 from clients import geocode as geocode_client
-from clients import molit_apt_basis, molit_apt_list, molit_building, molit_rent, molit_trade
+from clients import molit_apt_basis, molit_apt_list, molit_building, molit_rent, molit_trade, subway as subway_client
 from services import dong_codes, valuation
 
 
@@ -195,6 +195,14 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
         except Exception:
             geocode_result = None
 
+    # 인근 지하철역(역명/노선) — 좌표가 있어야 조회 가능하며, 부가 정보이므로 실패해도
+    # 검색 전체에 영향을 주지 않는다(subway_client 내부에서 이미 예외를 흡수함).
+    subway_info = None
+    if geocode_result:
+        subway_info = await subway_client.find_nearest_station(
+            geocode_result["lat"], geocode_result["lon"]
+        )
+
     # 건폐율/용적률 (건축물대장 표제부) — bjdCode(10자리, 시군구5+법정동5) + 지번 필요.
     building_info = None
     building_info_error = None
@@ -245,6 +253,7 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
         "building_info": building_info,
         "building_info_error": building_info_error,
         "building_title_list": building_title_list,
+        "subway_info": subway_info,
         "valuations": valuations,
         "trade_sample_total": len(matched_trades),
         "geocode": geocode_result,

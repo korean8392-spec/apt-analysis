@@ -5,6 +5,8 @@ const statusEl = $("#status");
 const resultEl = $("#result");
 const keyWarningEl = $("#key-warning");
 
+let currentData = null;
+
 function fmtWon(v10k) {
   if (v10k === null || v10k === undefined || Number.isNaN(v10k)) return "-";
   const eok = Math.floor(v10k / 10000);
@@ -74,6 +76,102 @@ function judgementInfo(fairPrice10k, askMin, askMax) {
     cls: "high",
     text: `입력한 호가가 추정 적정가 대비 약 ${Math.abs(diffPct).toFixed(1)}% 높습니다 — 협상 여지를 검토해보세요.`,
   };
+}
+
+const VERDICT_LABELS = {
+  "hot-deal": "🟢 매수 긍정적 (급매 가능성)",
+  fair: "🔵 적정가 근접",
+  high: "🟡 신중 검토 (고평가 가능성)",
+};
+
+function renderQuickCheck(data) {
+  const select = $("#quick-check-pyeong");
+  const minInput = $("#quick-check-min");
+  const maxInput = $("#quick-check-max");
+  const resultBox = $("#quick-check-result");
+
+  if (!data.valuations.length) {
+    select.innerHTML = "";
+    resultBox.innerHTML = `<p class="hint" style="margin:0">이 단지는 평형 데이터가 없어 판단할 수 없습니다.</p>`;
+    return;
+  }
+
+  const pyeongLabelFor = (v) => `${v.pyeong}평 (전용 ${v.avg_exclusive_area}㎡)`;
+
+  select.innerHTML = data.valuations
+    .map((v, i) => `<option value="${i}">${pyeongLabelFor(v)}</option>`)
+    .join("");
+
+  function computeVerdict() {
+    const v = data.valuations[select.value];
+    if (!v) return;
+    const askMin = numOrNull(minInput.value);
+    const askMax = numOrNull(maxInput.value);
+    if (!askMin && !askMax) {
+      resultBox.innerHTML = `<p class="hint" style="margin:0">호가를 입력하면 매수 판단이 여기 표시됩니다.</p>`;
+      return;
+    }
+    const info = judgementInfo(v.fair_price_10k, askMin, askMax);
+    const ask = askMin && askMax ? (askMin + askMax) / 2 : askMin || askMax;
+    const details = [`추정 적정가 ${fmtWon(v.fair_price_10k)} · 입력 호가 ${fmtWon(ask)}`];
+    if (v.peak_price_10k) {
+      details.push(
+        ask >= v.peak_price_10k
+          ? "전고점(최근 3년) 이상인 호가입니다."
+          : `전고점 대비 약 ${(((ask - v.peak_price_10k) / v.peak_price_10k) * 100).toFixed(1)}%`
+      );
+    }
+    if (v.jeonse_ratio_pct != null) {
+      details.push(`참고 전세가율 약 ${v.jeonse_ratio_pct}%`);
+    }
+    if (!info) {
+      resultBox.innerHTML = `<p class="hint" style="margin:0">이 평형은 적정가 추정치가 부족해 판단하기 어렵습니다.</p>`;
+      return;
+    }
+    resultBox.innerHTML = `
+      <div class="verdict-banner ${info.cls}">${VERDICT_LABELS[info.cls]}<br /><span style="font-weight:400">${info.text}</span></div>
+      <div class="verdict-detail">${details.join(" · ")}</div>
+    `;
+  }
+
+  function loadFromManual() {
+    const v = data.valuations[select.value];
+    const label = pyeongLabelFor(v);
+    const existing = (data.manual_listings || []).find((m) => m.pyeong_label === label);
+    minInput.value = existing?.ask_price_min ?? "";
+    maxInput.value = existing?.ask_price_max ?? "";
+    computeVerdict();
+  }
+
+  async function saveQuickCheck() {
+    const v = data.valuations[select.value];
+    if (!v) return;
+    const label = pyeongLabelFor(v);
+    const body = {
+      complex_key: data.complex_key,
+      pyeong_label: label,
+      exclusive_area: v.avg_exclusive_area,
+      ask_price_min: numOrNull(minInput.value),
+      ask_price_max: numOrNull(maxInput.value),
+    };
+    await fetch("/api/manual-listings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    data.manual_listings = data.manual_listings || [];
+    const idx = data.manual_listings.findIndex((m) => m.pyeong_label === label);
+    if (idx >= 0) data.manual_listings[idx] = { ...data.manual_listings[idx], ...body };
+    else data.manual_listings.push(body);
+  }
+
+  select.onchange = loadFromManual;
+  minInput.oninput = computeVerdict;
+  maxInput.oninput = computeVerdict;
+  minInput.onblur = saveQuickCheck;
+  maxInput.onblur = saveQuickCheck;
+
+  loadFromManual();
 }
 
 function buildCalcNote(v) {
@@ -190,7 +288,9 @@ async function runSearch(sigungu, aptName, kaptCode) {
 
 function renderResult(data) {
   resultEl.hidden = false;
+  currentData = data;
   $("#complex-title").textContent = `${data.sigungu.sido} ${data.sigungu.sigungu} · ${data.matched_apt_name}`;
+  renderQuickCheck(data);
 
   const summaryCard = $("#summary-card");
   if (data.summary_text) {

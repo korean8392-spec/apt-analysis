@@ -131,6 +131,19 @@ def _extract_signature(name_norm: str) -> tuple[str, str | None]:
     return core, number
 
 
+def _signature_matches(query_norm: str, candidate_norm: str) -> bool:
+    """핵심텍스트(단지번호 제외)와 단지번호가 둘 다 일치할 때만 True.
+
+    _strip_complex_number 기반 매칭과 달리 번호를 지우지 않고 비교하므로,
+    "창동주공17단지"와 "창동주공18단지"처럼 핵심텍스트는 같지만 번호가 다른
+    별개 단지끼리는 매칭되지 않는다(실제로 발견된 오탐 — 번호를 지우는 매칭을
+    후보 목록 검색에 썼더니 같은 계열의 다른 번호 단지가 전부 후보로 잘못
+    끼어들었다)."""
+    q_core, q_num = _extract_signature(query_norm)
+    c_core, c_num = _extract_signature(candidate_norm)
+    return bool(q_core and c_core and q_num and c_num and q_core == c_core and q_num == c_num)
+
+
 def fuzzy_name_matches_relaxed(query_norm: str, candidate_norm: str) -> bool:
     """fuzzy_name_matches보다 한 단계 더 관대한 매칭 — 실거래가 데이터와 단지목록
     데이터의 단지 번호 표기 방식이 다른 실제 사례들을 보완한다. 이미 특정 단지가
@@ -149,9 +162,7 @@ def fuzzy_name_matches_relaxed(query_norm: str, candidate_norm: str) -> bool:
 
     # 표기2: 번호는 있지만 위치/연결어가 다른 경우 (예: "목동8단지" vs "목동신시가지8") —
     # 핵심텍스트와 번호가 둘 다 일치할 때만 인정한다(번호가 다르면 다른 단지이므로 제외).
-    q_core, q_num = _extract_signature(query_norm)
-    c_core, c_num = _extract_signature(candidate_norm)
-    if q_core and c_core and q_num and c_num and q_core == c_core and q_num == c_num:
+    if _signature_matches(query_norm, candidate_norm):
         return True
 
     # 표기3: 실거래가가 지역명 없이 사업주체명("주공")+번호만 쓰는 경우(예: 공식명
@@ -182,10 +193,14 @@ def find_candidates(apt_list: list[dict], query_name: str, limit: int = 5) -> li
     if not exact and not partial:
         # 단지목록 공식명은 "등촌3단지주공아파트"처럼 번호가 "주공" 앞에 오는 등, 검색어의
         # 자연스러운 어순("등촌주공3단지")과 순서가 달라 기본 매칭이 실패하는 경우가 있다
-        # (실제 발견) — 이때만 완화된 매칭(핵심텍스트+번호 signature 비교)으로 재시도한다.
+        # (실제 발견) — 이때만 완화된 매칭으로 재시도한다. 단, fuzzy_name_matches_relaxed의
+        # 번호-제거 비교(표기1)는 여기서 쓰면 안 된다 — "창동주공17단지"를 검색했는데
+        # 단지목록에 17단지가 아예 없는 경우, 번호를 지우고 비교하면 핵심텍스트가 같은
+        # 18/19/4/3/2단지 등 완전히 다른 번호의 단지가 전부 후보로 잘못 끼어든다(실제로
+        # 발견된 오탐). 번호까지 정확히 일치해야 하는 _signature_matches만 쓴다.
         partial = [
             a for a in apt_list
-            if fuzzy_name_matches_relaxed(target, normalize_name(a["name"]))
+            if _signature_matches(target, normalize_name(a["name"]))
         ]
     partial.sort(key=lambda a: abs(len(normalize_name(a["name"])) - len(target)))
     return (exact + partial)[:limit]

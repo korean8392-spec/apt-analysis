@@ -391,10 +391,23 @@ function renderResult(data) {
   renderPyeongList(data);
 }
 
-let leafletMap = null;
-let leafletMarker = null;
+let kakaoMapReadyPromise = null;
+function ensureKakaoMapLoaded() {
+  if (kakaoMapReadyPromise) return kakaoMapReadyPromise;
+  kakaoMapReadyPromise = new Promise((resolve) => {
+    if (window.kakao && window.kakao.maps) {
+      window.kakao.maps.load(resolve);
+    } else {
+      resolve(); // SDK 로드 실패(차단/도메인 미등록 등) — 호출부에서 kakao 존재 여부로 다시 확인
+    }
+  });
+  return kakaoMapReadyPromise;
+}
 
-function renderMap(data) {
+let kakaoMap = null;
+let kakaoMarker = null;
+
+async function renderMap(data) {
   const mapEl = $("#map");
   const noteEl = $("#map-note");
   const geo = data.geocode;
@@ -408,23 +421,39 @@ function renderMap(data) {
     return;
   }
 
+  await ensureKakaoMapLoaded();
+
+  if (!window.kakao || !window.kakao.maps) {
+    mapEl.hidden = true;
+    noteEl.hidden = false;
+    noteEl.textContent = "카카오맵을 불러오지 못했습니다. 네트워크 상태를 확인해주세요.";
+    return;
+  }
+
   mapEl.hidden = false;
   noteEl.hidden = true;
 
   const { lat, lon } = geo;
-  if (!leafletMap) {
-    leafletMap = L.map(mapEl).setView([lat, lon], 17);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: "&copy; OpenStreetMap contributors",
-    }).addTo(leafletMap);
-    leafletMarker = L.marker([lat, lon]).addTo(leafletMap);
-  } else {
-    leafletMap.setView([lat, lon], 17);
-    leafletMarker.setLatLng([lat, lon]);
-    leafletMap.invalidateSize();
+  const position = new kakao.maps.LatLng(lat, lon);
+
+  try {
+    if (!kakaoMap) {
+      kakaoMap = new kakao.maps.Map(mapEl, { center: position, level: 3 });
+      kakaoMarker = new kakao.maps.Marker({ position, map: kakaoMap });
+    } else {
+      kakaoMap.setCenter(position);
+      kakaoMarker.setPosition(position);
+      kakao.maps.event.trigger(kakaoMap, "resize");
+    }
+    const infowindow = new kakao.maps.InfoWindow({
+      content: `<div style="padding:6px 10px;font-size:12px;white-space:nowrap;">${data.matched_apt_name}</div>`,
+    });
+    infowindow.open(kakaoMap, kakaoMarker);
+  } catch (e) {
+    mapEl.hidden = true;
+    noteEl.hidden = false;
+    noteEl.textContent = "카카오맵 표시 중 오류가 발생했습니다. 앱의 플랫폼 도메인 등록을 확인해주세요.";
   }
-  leafletMarker.bindPopup(data.matched_apt_name).openPopup();
 }
 
 function renderBuildingTitleList(list) {

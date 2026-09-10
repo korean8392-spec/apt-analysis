@@ -1,28 +1,20 @@
-"""인근 지하철역 조회 (OpenStreetMap Overpass API, 무료/키 불필요).
+"""인근 지하철역 조회 (카카오 로컬 API, category_group_code=SW8).
 
-단지 좌표(지오코딩 결과) 기준 반경 내 가장 가까운 역과 그 역을 지나는 노선을
-Overpass에서 조회한다. 역/노선 구성은 자주 바뀌지 않으므로 장기 캐시한다.
+애초에 무료 OSM Overpass API로 구현했으나, 배포 환경(Render)에서
+"ConnectError: All connection attempts failed"로 계속 실패하는 것을 실제로
+확인했다 — 소규모 커뮤니티 서버라 클라우드/데이터센터 IP 대역을 막아둔 것으로
+추정된다. 카카오 로컬 API는 상용 서비스라 이런 차단 위험이 낮고, 노선명까지
+place_name에 바로 포함돼 있어 더 간단하고 정확하다.
 """
 
-import asyncio
-import logging
-import math
-import time
 import httpx
 
 import db
+from config import KAKAO_REST_KEY
 
-logger = logging.getLogger("subway")
-
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+CATEGORY_URL = "https://dapi.kakao.com/v2/local/search/category.json"
 SEARCH_RADIUS_M = 2000
-# User-Agent 없이 호출하면 406 Not Acceptable을 반환한다(실제로 확인됨).
-_HEADERS = {"User-Agent": "naver-apt-analyzer/0.1 (personal local use)", "Accept": "*/*"}
-# 공용 Overpass 서버는 부하가 있을 때 타임아웃/빈 응답을 종종 반환한다(실제로 배포
-# 환경에서 확인됨) — "역이 없다"는 결과를 오래 캐시하면 이런 일시적 실패가 며칠씩
-# 굳어버리므로, 성공 결과보다 훨씬 짧게 캐시해 곧 재시도되게 한다.
-NOT_FOUND_CACHE_SEC = 60 * 60 * 6
-FOUND_CACHE_SEC = 60 * 60 * 24 * 180
+CACHE_SEC = 60 * 60 * 24 * 180
 
 
 def _round_coord(v: float) -> float:
@@ -30,99 +22,64 @@ def _round_coord(v: float) -> float:
     return round(v, 4)
 
 
-def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    r = 6371000.0
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(a))
-
-
-async def _overpass(query: str) -> dict:
-    async with httpx.AsyncClient(timeout=20, headers=_HEADERS) as client:
-        resp = await client.post(OVERPASS_URL, data={"data": query})
-        resp.raise_for_status()
-        return resp.json()
-
-
-async def _station_query_with_retry(lat: float, lon: float) -> list[dict]:
-    query = f"""
-    [out:json][timeout:20];
-    node["railway"="station"](around:{SEARCH_RADIUS_M},{lat},{lon});
-    out body;
-    """
-    last_error = None
-    for attempt in range(2):
-        try:
-            data = await _overpass(query)
-            return data.get("elements") or []
-        except Exception as e:
-            last_error = e
-            if attempt == 0:
-                await asyncio.sleep(1.5)
-    raise last_error
-
-
 async def find_nearest_station(lat: float, lon: float) -> dict | None:
+    if not KAKAO_REST_KEY:
+        return None
+
     cache_key = f"subway:{_round_coord(lat)}:{_round_coord(lon)}"
-    # 캐시는 "찾음"/"못찾음" 여부와 무관하게 일단 넉넉한 기간(found 기준) 내에서
-    # 읽되, "못찾음" 결과는 fetched_at이 NOT_FOUND_CACHE_SEC보다 오래됐으면
-    # 무시하고 재조회한다 — 성공 결과는 오래 신뢰하고, 실패는 빨리 재시도하기 위함.
-    cached = db.cache_get(cache_key, max_age_sec=FOUND_CACHE_SEC)
+    cached = db.cache_get(cache_key, max_age_sec=CACHE_SEC)
     if cached is not None:
-        if cached.get("found"):
-            return cached["data"]
-        if time.time() - cached.get("cached_at", 0) <= NOT_FOUND_CACHE_SEC:
-            return None
-        # 오래된 "못찾음" 캐시는 만료된 것으로 간주하고 아래에서 재조회한다.
+        return cached or None
 
     try:
-        elements = await _station_query_with_retry(lat, lon)
-        candidates = [e for e in elements if e.get("tags", {}).get("name")]
-        logger.warning("subway query (%s, %s): %d elements, %d named candidates", lat, lon, len(elements), len(candidates))
-        if not candidates:
-            db.cache_set(cache_key, {"found": False, "cached_at": time.time()})
-            return None
-
-        best = min(
-            candidates,
-            key=lambda e: _haversine_m(lat, lon, e["lat"], e["lon"]),
-        )
-        distance_m = round(_haversine_m(lat, lon, best["lat"], best["lon"]))
-        station_name = best["tags"]["name"]
-
-        # 노선 조회: "railway=station" 노드는 대개 route relation의 멤버가 아니라
-        # 별도의 stop_position/platform이 멤버로 들어있어 rel(bn)으로는 못 찾는다
-        # (실제 확인됨, 대치역 기준 rel(bn) 결과 0건). 대신 역 좌표 주변(250m)의
-        # route=subway relation을 공간 검색으로 찾는 방식을 쓴다.
-        lines: list[str] = []
-        try:
-            route_query = f"""
-            [out:json][timeout:20];
-            rel["route"="subway"](around:250,{best['lat']},{best['lon']});
-            out tags;
-            """
-            route_data = await _overpass(route_query)
-            for rel in route_data.get("elements") or []:
-                tags = rel.get("tags", {})
-                label = tags.get("ref")
-                if label and label.isdigit():
-                    label = f"{label}호선"
-                if label and label not in lines:
-                    lines.append(label)
-        except Exception:
-            pass
-
-        result = {
-            "station_name": station_name,
-            "lines": lines,
-            "distance_m": distance_m,
-            "walk_minutes": round(distance_m / 67),  # 도보 약 67m/분 기준
-        }
-        db.cache_set(cache_key, {"found": True, "data": result})
-        return result
-    except Exception as e:
-        # 네트워크 오류 등 실패는 캐시하지 않는다 — 다음 요청에서 바로 재시도된다.
-        logger.warning("find_nearest_station failed for (%s, %s): %r", lat, lon, e)
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                CATEGORY_URL,
+                headers={"Authorization": f"KakaoAK {KAKAO_REST_KEY}"},
+                params={
+                    "category_group_code": "SW8",
+                    "x": lon,
+                    "y": lat,
+                    "radius": SEARCH_RADIUS_M,
+                    "sort": "distance",
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception:
         return None
+
+    docs = data.get("documents") or []
+    if not docs:
+        db.cache_set(cache_key, None)
+        return None
+
+    nearest = docs[0]
+    # place_name이 "대치역 3호선"처럼 "역명 + 노선"으로 오므로 노선만 뽑아내고,
+    # 같은 역에서 갈아타는 다른 노선도 같은 거리 근방(±50m)에 있으면 함께 모은다.
+    def line_of(doc):
+        name = doc.get("place_name", "")
+        station = doc.get("place_name", "").split(" ")[0]
+        line = name[len(station):].strip()
+        return station, (line or None)
+
+    station_name, first_line = line_of(nearest)
+    nearest_distance = float(nearest.get("distance") or 0)
+    lines = [first_line] if first_line else []
+    for doc in docs[1:]:
+        name, line = line_of(doc)
+        if name != station_name:
+            continue
+        if abs(float(doc.get("distance") or 0) - nearest_distance) > 80:
+            continue
+        if line and line not in lines:
+            lines.append(line)
+
+    result = {
+        "station_name": station_name,
+        "lines": lines,
+        "distance_m": round(nearest_distance),
+        "walk_minutes": round(nearest_distance / 67),  # 도보 약 67m/분 기준
+    }
+    db.cache_set(cache_key, result)
+    return result

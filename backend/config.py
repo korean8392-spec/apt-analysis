@@ -10,6 +10,9 @@ load_dotenv(ROOT_DIR / ".env")
 # httpx가 쿼리스트링을 만들 때 이중 인코딩되지 않도록 여기서 한 번 디코딩해둔다.
 MOLIT_SERVICE_KEY = unquote(os.getenv("MOLIT_SERVICE_KEY", "").strip())
 
+# 카카오 로컬 API(REST) — 인근 지하철역 조회용. Kakao Developers 콘솔의 "REST API 키".
+KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY", "").strip()
+
 DB_PATH = ROOT_DIR / "backend" / "cache.sqlite3"
 LEGAL_DONG_CSV = ROOT_DIR / "backend" / "data" / "legal_dong_codes.csv"
 

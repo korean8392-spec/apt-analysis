@@ -5,11 +5,14 @@ Overpass에서 조회한다. 역/노선 구성은 자주 바뀌지 않으므로 
 """
 
 import asyncio
+import logging
 import math
 import time
 import httpx
 
 import db
+
+logger = logging.getLogger("subway")
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 SEARCH_RADIUS_M = 2000
@@ -77,6 +80,7 @@ async def find_nearest_station(lat: float, lon: float) -> dict | None:
     try:
         elements = await _station_query_with_retry(lat, lon)
         candidates = [e for e in elements if e.get("tags", {}).get("name")]
+        logger.warning("subway query (%s, %s): %d elements, %d named candidates", lat, lon, len(elements), len(candidates))
         if not candidates:
             db.cache_set(cache_key, {"found": False, "cached_at": time.time()})
             return None
@@ -118,6 +122,7 @@ async def find_nearest_station(lat: float, lon: float) -> dict | None:
         }
         db.cache_set(cache_key, {"found": True, "data": result})
         return result
-    except Exception:
+    except Exception as e:
         # 네트워크 오류 등 실패는 캐시하지 않는다 — 다음 요청에서 바로 재시도된다.
+        logger.warning("find_nearest_station failed for (%s, %s): %r", lat, lon, e)
         return None

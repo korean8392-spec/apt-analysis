@@ -4,7 +4,9 @@
 Overpass에서 조회한다. 역/노선 구성은 자주 바뀌지 않으므로 장기 캐시한다.
 """
 
+import asyncio
 import math
+import time
 import httpx
 
 import db
@@ -13,6 +15,11 @@ OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 SEARCH_RADIUS_M = 2000
 # User-Agent 없이 호출하면 406 Not Acceptable을 반환한다(실제로 확인됨).
 _HEADERS = {"User-Agent": "naver-apt-analyzer/0.1 (personal local use)", "Accept": "*/*"}
+# 공용 Overpass 서버는 부하가 있을 때 타임아웃/빈 응답을 종종 반환한다(실제로 배포
+# 환경에서 확인됨) — "역이 없다"는 결과를 오래 캐시하면 이런 일시적 실패가 며칠씩
+# 굳어버리므로, 성공 결과보다 훨씬 짧게 캐시해 곧 재시도되게 한다.
+NOT_FOUND_CACHE_SEC = 60 * 60 * 6
+FOUND_CACHE_SEC = 60 * 60 * 24 * 180
 
 
 def _round_coord(v: float) -> float:
@@ -36,23 +43,42 @@ async def _overpass(query: str) -> dict:
         return resp.json()
 
 
+async def _station_query_with_retry(lat: float, lon: float) -> list[dict]:
+    query = f"""
+    [out:json][timeout:20];
+    node["railway"="station"](around:{SEARCH_RADIUS_M},{lat},{lon});
+    out body;
+    """
+    last_error = None
+    for attempt in range(2):
+        try:
+            data = await _overpass(query)
+            return data.get("elements") or []
+        except Exception as e:
+            last_error = e
+            if attempt == 0:
+                await asyncio.sleep(1.5)
+    raise last_error
+
+
 async def find_nearest_station(lat: float, lon: float) -> dict | None:
     cache_key = f"subway:{_round_coord(lat)}:{_round_coord(lon)}"
-    cached = db.cache_get(cache_key, max_age_sec=60 * 60 * 24 * 180)
+    # 캐시는 "찾음"/"못찾음" 여부와 무관하게 일단 넉넉한 기간(found 기준) 내에서
+    # 읽되, "못찾음" 결과는 fetched_at이 NOT_FOUND_CACHE_SEC보다 오래됐으면
+    # 무시하고 재조회한다 — 성공 결과는 오래 신뢰하고, 실패는 빨리 재시도하기 위함.
+    cached = db.cache_get(cache_key, max_age_sec=FOUND_CACHE_SEC)
     if cached is not None:
-        return cached or None
+        if cached.get("found"):
+            return cached["data"]
+        if time.time() - cached.get("cached_at", 0) <= NOT_FOUND_CACHE_SEC:
+            return None
+        # 오래된 "못찾음" 캐시는 만료된 것으로 간주하고 아래에서 재조회한다.
 
     try:
-        station_query = f"""
-        [out:json][timeout:20];
-        node["railway"="station"](around:{SEARCH_RADIUS_M},{lat},{lon});
-        out body;
-        """
-        data = await _overpass(station_query)
-        elements = data.get("elements") or []
+        elements = await _station_query_with_retry(lat, lon)
         candidates = [e for e in elements if e.get("tags", {}).get("name")]
         if not candidates:
-            db.cache_set(cache_key, None)
+            db.cache_set(cache_key, {"found": False, "cached_at": time.time()})
             return None
 
         best = min(
@@ -90,7 +116,8 @@ async def find_nearest_station(lat: float, lon: float) -> dict | None:
             "distance_m": distance_m,
             "walk_minutes": round(distance_m / 67),  # 도보 약 67m/분 기준
         }
-        db.cache_set(cache_key, result)
+        db.cache_set(cache_key, {"found": True, "data": result})
         return result
     except Exception:
+        # 네트워크 오류 등 실패는 캐시하지 않는다 — 다음 요청에서 바로 재시도된다.
         return None

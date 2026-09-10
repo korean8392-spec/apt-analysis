@@ -854,4 +854,140 @@ $("#liquidity-search-btn").addEventListener("click", async () => {
   }
 });
 
+function estimateLoanCapacity10k(incomeMan, ratePct, years) {
+  const annualCapacity = incomeMan * 0.4; // DSR 40% 간이 기준
+  const monthlyCapacity = annualCapacity / 12;
+  const monthlyRate = ratePct / 100 / 12;
+  const n = years * 12;
+  if (monthlyRate === 0) return monthlyCapacity * n;
+  return (monthlyCapacity * (1 - Math.pow(1 + monthlyRate, -n))) / monthlyRate;
+}
+
+const BUDGET_METRIC_TABS = [
+  { key: "trade_count_1y", label: "거래량순", dir: -1 },
+  { key: "momentum_pct", label: "최근 1년 상승률순", dir: -1 },
+  { key: "subway_distance", label: "지하철 인접순", dir: 1 },
+];
+
+let budgetCandidates = [];
+
+function candidateCardHtml(c, i) {
+  const subway = c.subway_info
+    ? `${c.subway_info.station_name}${c.subway_info.lines?.length ? ` (${c.subway_info.lines.join(", ")})` : ""} · 도보 ${c.subway_info.walk_minutes}분`
+    : "인근 역 없음";
+  const school = c.school_info;
+  const elem = school?.elementary ? `${school.elementary.name} (${Math.round(school.elementary.distance_m / 67)}분)` : "-";
+  const mid = school?.middle ? `${school.middle.name} (${Math.round(school.middle.distance_m / 67)}분)` : "-";
+  const momentumCls = c.momentum_pct > 0 ? "up" : c.momentum_pct < 0 ? "down" : "";
+  const momentumSign = c.momentum_pct > 0 ? "+" : "";
+
+  return `
+    <div class="candidate-card">
+      <div class="cc-head">
+        <span class="cc-rank">${i + 1}</span>
+        <span class="cc-name">${c.apt_name}</span>
+        <span class="cc-dong">${c.dong}${c.avg_pyeong ? ` · ${c.avg_pyeong}평` : ""}</span>
+      </div>
+      <div class="cc-meta">
+        <div><div class="label">평균가</div><div class="value">${fmtWon(c.avg_price_10k)}</div></div>
+        <div><div class="label">최근 1년 거래</div><div class="value">${c.trade_count_1y}건</div></div>
+        <div><div class="label">최근 1년 상승률</div><div class="value ${momentumCls}">${momentumSign}${c.momentum_pct}%</div></div>
+        <div><div class="label">인근 지하철</div><div class="value">${subway}</div></div>
+        <div><div class="label">가까운 초등학교</div><div class="value">${elem}</div></div>
+        <div><div class="label">가까운 중학교</div><div class="value">${mid}</div></div>
+      </div>
+    </div>
+  `;
+}
+
+function renderBudgetCandidates(sortKey) {
+  const listEl = $("#budget-candidate-list");
+  if (!listEl) return;
+  const sorted = [...budgetCandidates];
+  if (sortKey === "subway_distance") {
+    sorted.sort((a, b) => {
+      const da = a.subway_info?.distance_m ?? Infinity;
+      const db = b.subway_info?.distance_m ?? Infinity;
+      return da - db;
+    });
+  } else if (sortKey) {
+    const tab = BUDGET_METRIC_TABS.find((t) => t.key === sortKey);
+    sorted.sort((a, b) => (a[sortKey] - b[sortKey]) * tab.dir);
+  }
+  listEl.innerHTML = sorted.map((c, i) => candidateCardHtml(c, i)).join("");
+}
+
+async function runBudgetScreening() {
+  const resultEl = $("#budget-result");
+  const sigungu = $("#budget-sigungu").value.trim();
+  const cash = numOrNull($("#budget-cash").value) || 0;
+  const income = numOrNull($("#budget-income").value);
+  const rate = numOrNull($("#budget-rate").value) || 4.5;
+  const years = numOrNull($("#budget-years").value) || 30;
+
+  if (!sigungu || !income) {
+    resultEl.innerHTML = `<p class="hint" style="margin:8px 0 0;color:#dc2626">시군구와 연소득을 입력하세요.</p>`;
+    return;
+  }
+
+  const loanCapacity = estimateLoanCapacity10k(income, rate, years);
+  const budget = cash + loanCapacity;
+
+  resultEl.innerHTML = `
+    <div class="budget-summary">
+      추정 대출 한도(DSR 40% 기준) <b>${fmtWon(Math.round(loanCapacity))}</b> · 보유 현금 ${fmtWon(cash)}
+      → 총 예산 <b>${fmtWon(Math.round(budget))}</b>
+    </div>
+    <p class="hint" style="margin:4px 0 0">후보 조회 중...</p>
+  `;
+
+  try {
+    const params = new URLSearchParams({ sigungu, max_price: Math.round(budget) });
+    const res = await fetch(`/api/budget-screening?${params}`);
+    const data = await res.json();
+    if (!res.ok) {
+      resultEl.innerHTML += `<p class="hint" style="margin:8px 0 0;color:#dc2626">${data.detail || "조회 실패"}</p>`;
+      return;
+    }
+    budgetCandidates = data.candidates;
+    if (!budgetCandidates.length) {
+      resultEl.innerHTML = `
+        <div class="budget-summary">
+          추정 대출 한도(DSR 40% 기준) <b>${fmtWon(Math.round(loanCapacity))}</b> · 보유 현금 ${fmtWon(cash)}
+          → 총 예산 <b>${fmtWon(Math.round(budget))}</b>
+        </div>
+        <p class="hint" style="margin:8px 0 0">이 예산 내에서 최근 1년 거래가 충분한 단지를 찾지 못했습니다. 시군구를 바꾸거나 예산을 조정해보세요.</p>
+      `;
+      return;
+    }
+    const tabsHtml = `
+      <div class="metric-tabs">
+        <button type="button" class="active" data-sort="">전체</button>
+        ${BUDGET_METRIC_TABS.map((t) => `<button type="button" data-sort="${t.key}">${t.label}</button>`).join("")}
+      </div>
+    `;
+    resultEl.innerHTML = `
+      <div class="budget-summary">
+        추정 대출 한도(DSR 40% 기준) <b>${fmtWon(Math.round(loanCapacity))}</b> · 보유 현금 ${fmtWon(cash)}
+        → 총 예산 <b>${fmtWon(Math.round(budget))}</b>
+      </div>
+      <p class="hint" style="margin:8px 0 0">${data.sigungu.sido} ${data.sigungu.sigungu} · 예산 내 최근 1년 거래 있는 단지 ${data.total_matched_complexes}곳 중 거래량 상위 ${budgetCandidates.length}곳</p>
+      ${tabsHtml}
+      <div id="budget-candidate-list" class="candidate-card-list"></div>
+    `;
+    $$(".metric-tabs button", resultEl).forEach((btn) => {
+      btn.addEventListener("click", () => {
+        $$(".metric-tabs button", resultEl).forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        renderBudgetCandidates(btn.dataset.sort);
+      });
+    });
+    renderBudgetCandidates("");
+  } catch (err) {
+    resultEl.innerHTML += `<p class="hint" style="margin:8px 0 0;color:#dc2626">네트워크 오류: ${err}</p>`;
+  }
+}
+
+$("#budget-search-btn").addEventListener("click", runBudgetScreening);
+
 checkHealth();

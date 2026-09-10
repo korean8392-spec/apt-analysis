@@ -131,6 +131,26 @@ def _extract_signature(name_norm: str) -> tuple[str, str | None]:
     return core, number
 
 
+def _strip_all_digits(name_norm: str) -> str:
+    import re
+
+    return re.sub(r"\d+", "", name_norm)
+
+
+def _bare_name_matches(query_norm: str, candidate_norm: str) -> bool:
+    """검색어에 번호가 전혀 없을 때만, 후보명에서 숫자를 다 지우고 비교한다.
+
+    공식명이 "방화2-2 그린"처럼 사용자가 입력하지 않을 법한 동/블록 식별자를
+    포함하는 경우를 위한 것이다(실제 발견: 검색어 "방화그린" vs 공식명
+    "방화2-2 그린" — 정규화 후 "방화22그린"이 되어 기존 매칭 어느 것도 못 찾음).
+    검색어 자체에 번호가 있으면(예: "창동주공17단지") 이 함수를 타지 않으므로,
+    번호가 다른 동일 계열 단지(18/19단지 등)를 끌어오는 위험은 없다."""
+    q_core, q_num = _extract_signature(query_norm)
+    if q_num is not None or not query_norm:
+        return False
+    return _strip_all_digits(candidate_norm) == query_norm
+
+
 def _signature_matches(query_norm: str, candidate_norm: str) -> bool:
     """핵심텍스트(단지번호 제외)와 단지번호가 둘 다 일치할 때만 True.
 
@@ -171,10 +191,22 @@ def fuzzy_name_matches_relaxed(query_norm: str, candidate_norm: str) -> bool:
     # 포함하면 같은 단지로 본다 — 이 경우 전국에 흔한 "주공N" 표기가 다른 동네의 별개 단지와
     # 겹칠 위험이 있으므로, 호출부(complex_search.py)에서 반드시 법정동 일치 여부로 한 번 더
     # 걸러야 한다.
+    q_core, q_num = _extract_signature(query_norm)
+    c_core, c_num = _extract_signature(candidate_norm)
     if q_num and c_num and q_num == c_num:
         if c_core == "주공" and "주공" in q_core:
             return True
         if q_core == "주공" and "주공" in c_core:
+            return True
+
+    # 표기4: 어느 한쪽에는 번호가 아예 없고, 번호를 전부 지운 핵심텍스트는 서로 같은
+    # 경우(예: 공식명 "방화2-2 그린"=지역명+블록번호+이름 vs 실거래가 "방화그린"=번호
+    # 생략 — "N단지"도 아니고 번호 위치도 특정되지 않아 앞의 표기들로는 못 잡음). 이미
+    # 특정 단지가 확정된 뒤에만 쓰이므로(find_candidates가 아니라 여기, 실거래가 매칭
+    # 단계) 오매칭 위험이 낮다.
+    if q_num is None or c_num is None:
+        q_bare, c_bare = _strip_all_digits(query_norm), _strip_all_digits(candidate_norm)
+        if q_bare and c_bare and q_bare == c_bare:
             return True
 
     return False
@@ -201,6 +233,14 @@ def find_candidates(apt_list: list[dict], query_name: str, limit: int = 5) -> li
         partial = [
             a for a in apt_list
             if _signature_matches(target, normalize_name(a["name"]))
+        ]
+    if not exact and not partial:
+        # 방화그린 사례: 검색어에 번호가 전혀 없는데 공식명에만 동/블록 식별자
+        # 번호가 붙어있는 경우(예: "방화2-2 그린"). 검색어에 번호가 없을 때만
+        # 시도하므로 번호로 구분되는 동일 계열 단지를 잘못 끌어올 위험이 없다.
+        partial = [
+            a for a in apt_list
+            if _bare_name_matches(target, normalize_name(a["name"]))
         ]
     partial.sort(key=lambda a: abs(len(normalize_name(a["name"])) - len(target)))
     return (exact + partial)[:limit]

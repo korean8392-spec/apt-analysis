@@ -1,0 +1,636 @@
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+
+const statusEl = $("#status");
+const resultEl = $("#result");
+const keyWarningEl = $("#key-warning");
+
+function fmtWon(v10k) {
+  if (v10k === null || v10k === undefined || Number.isNaN(v10k)) return "-";
+  const eok = Math.floor(v10k / 10000);
+  const man = Math.round(v10k % 10000);
+  if (eok > 0) return `${eok}억 ${man.toLocaleString()}만원`;
+  return `${man.toLocaleString()}만원`;
+}
+
+// 서울/경기 공통 법정 상한요율 (2021년 개정 기준, 주택 매매)
+function brokerFee(price10k) {
+  const price = price10k * 10000;
+  let rate, cap;
+  if (price < 50000000) { rate = 0.006; cap = 250000; }
+  else if (price < 200000000) { rate = 0.005; cap = 800000; }
+  else if (price < 900000000) { rate = 0.004; cap = null; }
+  else if (price < 1200000000) { rate = 0.005; cap = null; }
+  else if (price < 1500000000) { rate = 0.006; cap = null; }
+  else { rate = 0.007; cap = null; }
+  let fee = price * rate;
+  if (cap !== null) fee = Math.min(fee, cap);
+  return { rate, fee: Math.round(fee), vat: Math.round(fee * 0.1) };
+}
+
+// 1주택자 유상취득 기준 취득세(+지방교육세+농특세)
+function acquisitionTax(price10k, exclusiveArea) {
+  const price = price10k * 10000;
+  const priceEok = price / 100000000;
+  let taxRate;
+  if (priceEok <= 6) taxRate = 1.0;
+  else if (priceEok <= 9) taxRate = 1 + ((priceEok - 6) / 3) * 2;
+  else taxRate = 3.0;
+
+  const eduTaxRate = taxRate * 0.1;
+  const ruralTaxRate = exclusiveArea && exclusiveArea > 85 ? 0.2 : 0;
+  const totalRate = taxRate + eduTaxRate + ruralTaxRate;
+
+  return {
+    taxRate,
+    eduTaxRate,
+    ruralTaxRate,
+    totalRate,
+    acquisitionTax: Math.round((price * taxRate) / 100),
+    eduTax: Math.round((price * eduTaxRate) / 100),
+    ruralTax: Math.round((price * ruralTaxRate) / 100),
+    total: Math.round((price * totalRate) / 100),
+  };
+}
+
+function judgementInfo(fairPrice10k, askMin, askMax) {
+  if (!fairPrice10k || (!askMin && !askMax)) return null;
+  const ask = askMin && askMax ? (askMin + askMax) / 2 : askMin || askMax;
+  const diffPct = ((fairPrice10k - ask) / fairPrice10k) * 100;
+  if (diffPct >= 5) {
+    return {
+      cls: "hot-deal",
+      text: `입력한 호가가 추정 적정가 대비 약 ${diffPct.toFixed(1)}% 낮습니다 — 급매 가능성이 있어 보입니다.`,
+    };
+  }
+  if (diffPct >= -3) {
+    const sign = diffPct >= 0 ? "-" : "+";
+    return {
+      cls: "fair",
+      text: `입력한 호가가 추정 적정가와 비슷한 수준입니다 (${sign}${Math.abs(diffPct).toFixed(1)}%).`,
+    };
+  }
+  return {
+    cls: "high",
+    text: `입력한 호가가 추정 적정가 대비 약 ${Math.abs(diffPct).toFixed(1)}% 높습니다 — 협상 여지를 검토해보세요.`,
+  };
+}
+
+function buildCalcNote(v) {
+  const method = v.used_trend_regression
+    ? "최근 3년 실거래가에 최근 거래일수록 더 큰 가중치(반감기 180일 지수감쇠)를 주는 가중회귀직선을 적합해 오늘 시점 추세가를 추정"
+    : "표본이 3건 미만이라 회귀분석 대신 최근일수록 가중치를 더 주는 가중평균으로 추정";
+  return `산출 근거: 이 평형의 최근 3년 실거래 ${v.sample_count}건(최근 1년 ${v.sample_count_1y}건)을 바탕으로, ${method}했습니다. 통계적 참고치이며 투자 자문이 아닙니다.`;
+}
+
+function bandBoxContent(v) {
+  const band = v.price_band_10k;
+  const fair = v.fair_price_10k;
+  if (!band || !fair) return `<div class="value">-</div>`;
+
+  const p25Pct = ((band.p25 - fair) / fair) * 100;
+  const p75Pct = ((band.p75 - fair) / fair) * 100;
+  const fmtPct = (p) => (p >= 0 ? `+${p.toFixed(1)}%` : `${p.toFixed(1)}%`);
+
+  const span = band.p75 - band.p25;
+  const markerPct = span > 0 ? Math.min(100, Math.max(0, ((fair - band.p25) / span) * 100)) : 50;
+
+  return `
+    <div class="value">${fmtPct(p25Pct)} ~ ${fmtPct(p75Pct)}</div>
+    <div class="band-sub">${fmtWon(band.p25)} ~ ${fmtWon(band.p75)}</div>
+    <div class="band-bar">
+      <div class="band-marker" style="left:${markerPct}%" title="추정 적정가 위치"></div>
+    </div>
+  `;
+}
+
+async function checkHealth() {
+  try {
+    const res = await fetch("/api/health");
+    const data = await res.json();
+    keyWarningEl.hidden = !!data.molit_key_configured;
+  } catch (e) {
+    // 서버 자체가 안 뜬 경우는 검색 시 에러로 알림
+  }
+}
+
+const candidateSection = $("#candidate-section");
+const candidateListEl = $("#candidate-list");
+
+$("#search-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const sigungu = $("#sigungu").value.trim();
+  const aptName = $("#apt-name").value.trim();
+  if (!sigungu || !aptName) return;
+
+  candidateSection.hidden = true;
+  resultEl.hidden = true;
+  statusEl.textContent = "단지 찾는 중...";
+
+  try {
+    const url = `/api/find-complex?sigungu=${encodeURIComponent(sigungu)}&apt_name=${encodeURIComponent(aptName)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!res.ok) {
+      statusEl.innerHTML = `<span style="color:#dc2626">${data.detail || "조회 실패"}</span>`;
+      return;
+    }
+    statusEl.textContent = "";
+    if (!data.candidates.length) {
+      // 공식 단지목록에 없는 경우 실거래가 이름 매칭만으로 바로 조회를 시도한다.
+      await runSearch(sigungu, aptName, null);
+      return;
+    }
+    renderCandidates(sigungu, aptName, data.candidates);
+  } catch (err) {
+    statusEl.innerHTML = `<span style="color:#dc2626">네트워크 오류: ${err}</span>`;
+  }
+});
+
+function renderCandidates(sigungu, aptName, candidates) {
+  candidateSection.hidden = false;
+  candidateListEl.innerHTML = "";
+  for (const c of candidates) {
+    const item = document.createElement("div");
+    item.className = "candidate-item";
+    item.innerHTML = `
+      <div class="info">
+        <div class="name">${c.name}</div>
+        <div class="address">${c.address || "-"}</div>
+      </div>
+      <button type="button">이 단지 맞음</button>
+    `;
+    item.querySelector("button").addEventListener("click", () => {
+      candidateSection.hidden = true;
+      runSearch(sigungu, aptName, c.kapt_code);
+    });
+    candidateListEl.appendChild(item);
+  }
+}
+
+async function runSearch(sigungu, aptName, kaptCode) {
+  statusEl.textContent = "조회 중... (국토부 API에서 최근 36개월 실거래가를 가져오는 중이라 몇 초 걸릴 수 있어요)";
+  resultEl.hidden = true;
+
+  try {
+    let url = `/api/search?sigungu=${encodeURIComponent(sigungu)}&apt_name=${encodeURIComponent(aptName)}`;
+    if (kaptCode) url += `&kapt_code=${encodeURIComponent(kaptCode)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!res.ok) {
+      statusEl.innerHTML = `<span style="color:#dc2626">${data.detail || "조회 실패"}</span>`;
+      return;
+    }
+    statusEl.textContent = "";
+    renderResult(data);
+  } catch (err) {
+    statusEl.innerHTML = `<span style="color:#dc2626">네트워크 오류: ${err}</span>`;
+  }
+}
+
+function renderResult(data) {
+  resultEl.hidden = false;
+  $("#complex-title").textContent = `${data.sigungu.sido} ${data.sigungu.sigungu} · ${data.matched_apt_name}`;
+
+  const summaryCard = $("#summary-card");
+  if (data.summary_text) {
+    summaryCard.hidden = false;
+    $("#summary-text").textContent = data.summary_text;
+  } else {
+    summaryCard.hidden = true;
+  }
+
+  const info = data.official_info;
+  const basis = data.basis_info;
+  const building = data.building_info;
+  const manual = data.manual_complex_info;
+  const grid = $("#official-info-grid");
+  grid.innerHTML = "";
+
+  const items = [
+    ["주소", basis?.address || info?.address || "-"],
+    ["세대수", manual?.household_cnt ?? basis?.household_cnt ?? "-"],
+    ["동수", basis?.dong_cnt ?? "-"],
+    ["최고층", basis?.top_floor ?? "-"],
+    ["사용승인일", basis?.use_approval_date ?? (manual?.use_approval_year ? `${manual.use_approval_year}년` : "-")],
+    ["난방방식", basis?.heat_type ?? "-"],
+    ["건폐율(%)", manual?.building_coverage_ratio ?? building?.building_coverage_ratio ?? "직접입력 필요"],
+    ["용적률(%)", manual?.floor_area_ratio ?? building?.floor_area_ratio ?? "직접입력 필요"],
+    ["총 주차대수", building?.total_parking_cnt ?? "-"],
+    ["실거래 표본 수(36개월)", data.trade_sample_total],
+  ];
+  for (const msg of [data.basis_info_error, data.building_info_error]) {
+    if (!msg) continue;
+    const warn = document.createElement("div");
+    warn.className = "banner warning";
+    warn.style.gridColumn = "1 / -1";
+    warn.textContent = msg;
+    grid.appendChild(warn);
+  }
+  for (const [label, value] of items) {
+    const div = document.createElement("div");
+    div.className = "info-item";
+    div.innerHTML = `<div class="label">${label}</div><div class="value">${value}</div>`;
+    grid.appendChild(div);
+  }
+
+  renderMap(data);
+  renderBuildingTitleList(data.building_title_list || []);
+
+  const manualForm = $("#manual-complex-form");
+  manualForm.building_coverage_ratio.value =
+    manual?.building_coverage_ratio ?? building?.building_coverage_ratio ?? "";
+  manualForm.floor_area_ratio.value =
+    manual?.floor_area_ratio ?? building?.floor_area_ratio ?? "";
+  manualForm.household_cnt.value = manual?.household_cnt ?? "";
+  manualForm.use_approval_year.value = manual?.use_approval_year ?? "";
+  manualForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const body = {
+      complex_key: data.complex_key,
+      building_coverage_ratio: numOrNull(manualForm.building_coverage_ratio.value),
+      floor_area_ratio: numOrNull(manualForm.floor_area_ratio.value),
+      household_cnt: numOrNull(manualForm.household_cnt.value),
+      use_approval_year: numOrNull(manualForm.use_approval_year.value),
+    };
+    await fetch("/api/manual-complex-info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    manualForm.closest("details").open = false;
+  };
+
+  renderPyeongList(data);
+}
+
+let leafletMap = null;
+let leafletMarker = null;
+
+function renderMap(data) {
+  const mapEl = $("#map");
+  const noteEl = $("#map-note");
+  const geo = data.geocode;
+
+  if (!geo) {
+    mapEl.hidden = true;
+    noteEl.hidden = false;
+    noteEl.textContent = data.geocode_query
+      ? `지도에 표시할 위치를 찾지 못했습니다 (검색 주소: ${data.geocode_query}).`
+      : "지도에 표시할 주소 정보가 없습니다.";
+    return;
+  }
+
+  mapEl.hidden = false;
+  noteEl.hidden = true;
+
+  const { lat, lon } = geo;
+  if (!leafletMap) {
+    leafletMap = L.map(mapEl).setView([lat, lon], 17);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors",
+    }).addTo(leafletMap);
+    leafletMarker = L.marker([lat, lon]).addTo(leafletMap);
+  } else {
+    leafletMap.setView([lat, lon], 17);
+    leafletMarker.setLatLng([lat, lon]);
+    leafletMap.invalidateSize();
+  }
+  leafletMarker.bindPopup(data.matched_apt_name).openPopup();
+}
+
+function renderBuildingTitleList(list) {
+  const el = $("#building-title-list");
+  if (!list.length) {
+    el.innerHTML = `<p class="hint" style="margin:0">조회된 개별 동 표제부가 없습니다.</p>`;
+    return;
+  }
+  el.innerHTML = list
+    .map(
+      (d) => `
+      <div class="dong-item">
+        <div class="name">${d.dong_name || "-"}</div>
+        <div class="ratios">건폐 ${d.building_coverage_ratio ?? 0}% · 용적 ${d.floor_area_ratio ?? 0}%</div>
+        <div class="ratios">${d.ground_floor_cnt ?? "-"}층 · ${d.household_cnt ?? 0}세대</div>
+      </div>`
+    )
+    .join("");
+}
+
+function numOrNull(v) {
+  if (v === "" || v === null || v === undefined) return null;
+  const n = Number(v);
+  return Number.isNaN(n) ? null : n;
+}
+
+function renderPyeongFilter(valuations) {
+  const el = $("#pyeong-filter");
+  el.innerHTML = "";
+  if (valuations.length <= 1) return; // 평형이 하나뿐이면 필터가 의미 없음
+
+  const pyeongs = [...new Set(valuations.map((v) => v.pyeong))].sort((a, b) => a - b);
+
+  const makeButton = (label, pyeongValue, active) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = label;
+    if (active) btn.classList.add("active");
+    btn.addEventListener("click", () => {
+      $$(".pyeong-filter button").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      $$(".pyeong-card").forEach((card) => {
+        const show = pyeongValue === null || card.dataset.pyeong === String(pyeongValue);
+        card.hidden = !show;
+      });
+    });
+    return btn;
+  };
+
+  el.appendChild(makeButton("전체", null, true));
+  for (const p of pyeongs) {
+    el.appendChild(makeButton(`${p}평`, p, false));
+  }
+}
+
+function renderPyeongList(data) {
+  const container = $("#pyeong-list");
+  container.innerHTML = "";
+  const template = $("#pyeong-card-template");
+  const manualListings = data.manual_listings || [];
+
+  if (!data.valuations.length) {
+    $("#pyeong-filter").innerHTML = "";
+    container.innerHTML = `<p class="status">최근 36개월간 매칭되는 실거래 내역이 없습니다.</p>`;
+    return;
+  }
+
+  renderPyeongFilter(data.valuations);
+
+  for (const v of data.valuations) {
+    const node = template.content.cloneNode(true);
+    const pyeongLabel = `${v.pyeong}평 (전용 ${v.avg_exclusive_area}㎡)`;
+
+    node.querySelector(".pyeong-card").dataset.pyeong = String(v.pyeong);
+    node.querySelector("h3").textContent = pyeongLabel;
+    const badge = node.querySelector(".confidence-badge");
+    badge.textContent = { high: "신뢰도 높음", medium: "신뢰도 보통", low: "신뢰도 낮음" }[v.confidence];
+    badge.classList.add(v.confidence);
+
+    const breakoutBadge = node.querySelector(".breakout-badge");
+    if (v.is_breakout === true) {
+      breakoutBadge.textContent = "전고점 돌파";
+      breakoutBadge.className = "breakout-badge new-high";
+    } else if (v.is_breakout === false && v.gap_to_peak_pct >= -5) {
+      breakoutBadge.textContent = `전고점 근접 (${v.gap_to_peak_pct}%)`;
+      breakoutBadge.className = "breakout-badge near-high";
+    } else if (v.is_breakout === false) {
+      breakoutBadge.textContent = `전고점 대비 ${v.gap_to_peak_pct}%`;
+      breakoutBadge.className = "breakout-badge below-high";
+    } else {
+      breakoutBadge.hidden = true;
+    }
+
+    const summary = node.querySelector(".valuation-summary");
+    summary.innerHTML = `
+      <div class="box">
+        <div class="label">추정 적정가</div>
+        <div class="value accent">${fmtWon(v.fair_price_10k)}</div>
+      </div>
+      <div class="box">
+        <div class="label">직전거래가 (${v.last_deal_date ?? "-"})</div>
+        <div class="value">${fmtWon(v.last_deal_price_10k)}</div>
+      </div>
+      <div class="box">
+        <div class="label">전고점 (최근 3년, ${v.peak_date ?? "-"})</div>
+        <div class="value">${fmtWon(v.peak_price_10k)}</div>
+      </div>
+      <div class="box band-box">
+        <div class="label">최근 거래 가격대 (적정가 대비)</div>
+        ${bandBoxContent(v)}
+      </div>
+      <div class="box">
+        <div class="label">표본 수 (1년 / 3년)</div>
+        <div class="value">${v.sample_count_1y} / ${v.sample_count_3y}</div>
+      </div>
+      <div class="box">
+        <div class="label">전세가 중앙값 (최근 1년)</div>
+        <div class="value">${fmtWon(v.jeonse_median_10k)}</div>
+      </div>
+      <div class="box">
+        <div class="label">전세 최고가 (최근 1년)</div>
+        <div class="value">${fmtWon(v.jeonse_max_10k)}</div>
+      </div>
+      <div class="box">
+        <div class="label">전세가율 (중앙값 기준)</div>
+        <div class="value">${v.jeonse_ratio_pct != null ? `${v.jeonse_ratio_pct}%` : "-"}
+          ${v.jeonse_sample_count_1y ? `<span style="font-weight:400;color:var(--muted);font-size:11px"> (표본 ${v.jeonse_sample_count_1y})</span>` : ""}
+        </div>
+      </div>
+    `;
+
+    const calcNoteEl = node.querySelector(".calc-note");
+    calcNoteEl.textContent = buildCalcNote(v);
+
+    const judgementEl = node.querySelector(".judgement-banner");
+
+    const canvas = node.querySelector(".trade-chart");
+    setTimeout(() => renderChart(canvas, v), 0);
+
+    const listingForm = node.querySelector(".manual-listing-form");
+    const currentDiv = node.querySelector(".manual-listing-current");
+    const calcPriceInput = node.querySelector(".cost-calc-price");
+    const calcResultEl = node.querySelector(".cost-calc-result");
+
+    function refreshJudgement(askMin, askMax) {
+      const info = judgementInfo(v.fair_price_10k, askMin, askMax);
+      if (!info) {
+        judgementEl.hidden = true;
+        judgementEl.className = "judgement-banner";
+        return;
+      }
+      judgementEl.hidden = false;
+      judgementEl.className = `judgement-banner ${info.cls}`;
+      judgementEl.textContent = info.text;
+    }
+
+    function refreshCostCalc() {
+      const price10k = numOrNull(calcPriceInput.value);
+      if (!price10k) {
+        calcResultEl.innerHTML = "";
+        return;
+      }
+      const fee = brokerFee(price10k);
+      const tax = acquisitionTax(price10k, v.avg_exclusive_area);
+      calcResultEl.innerHTML = `
+        <div class="box">
+          <div class="label">중개수수료 상한 (요율 ${(fee.rate * 100).toFixed(2)}%)</div>
+          <div class="value">${fmtWon(Math.round(fee.fee / 10000))}</div>
+        </div>
+        <div class="box">
+          <div class="label">부가세(10%) 별도</div>
+          <div class="value">${fmtWon(Math.round(fee.vat / 10000))}</div>
+        </div>
+        <div class="box">
+          <div class="label">취득세 (세율 ${tax.taxRate.toFixed(2)}%)</div>
+          <div class="value">${fmtWon(Math.round(tax.acquisitionTax / 10000))}</div>
+        </div>
+        <div class="box">
+          <div class="label">지방교육세+농특세</div>
+          <div class="value">${fmtWon(Math.round((tax.eduTax + tax.ruralTax) / 10000))}</div>
+        </div>
+        <div class="box">
+          <div class="label">취득 관련 세금 합계</div>
+          <div class="value accent">${fmtWon(Math.round(tax.total / 10000))}</div>
+        </div>
+      `;
+    }
+
+    const existing = manualListings.find((m) => m.pyeong_label === pyeongLabel);
+    if (existing) {
+      listingForm.listing_count.value = existing.listing_count ?? "";
+      listingForm.ask_price_min.value = existing.ask_price_min ?? "";
+      listingForm.ask_price_max.value = existing.ask_price_max ?? "";
+      currentDiv.textContent = `마지막 입력: 매물 ${existing.listing_count ?? "-"}건, 호가 ${fmtWon(existing.ask_price_min)} ~ ${fmtWon(existing.ask_price_max)}`;
+    }
+
+    const initialAskMin = existing?.ask_price_min;
+    const initialAskMax = existing?.ask_price_max;
+    refreshJudgement(initialAskMin, initialAskMax);
+    calcPriceInput.value = Math.round(
+      initialAskMin && initialAskMax
+        ? (initialAskMin + initialAskMax) / 2
+        : initialAskMin || initialAskMax || v.fair_price_10k || 0
+    ) || "";
+    refreshCostCalc();
+    calcPriceInput.addEventListener("input", refreshCostCalc);
+
+    listingForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const body = {
+        complex_key: data.complex_key,
+        pyeong_label: pyeongLabel,
+        exclusive_area: v.avg_exclusive_area,
+        listing_count: numOrNull(listingForm.listing_count.value),
+        ask_price_min: numOrNull(listingForm.ask_price_min.value),
+        ask_price_max: numOrNull(listingForm.ask_price_max.value),
+      };
+      await fetch("/api/manual-listings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      currentDiv.textContent = `마지막 입력: 매물 ${body.listing_count ?? "-"}건, 호가 ${fmtWon(body.ask_price_min)} ~ ${fmtWon(body.ask_price_max)}`;
+      refreshJudgement(body.ask_price_min, body.ask_price_max);
+      if (body.ask_price_min || body.ask_price_max) {
+        calcPriceInput.value = Math.round(
+          body.ask_price_min && body.ask_price_max
+            ? (body.ask_price_min + body.ask_price_max) / 2
+            : body.ask_price_min || body.ask_price_max
+        );
+        refreshCostCalc();
+      }
+    };
+
+    container.appendChild(node);
+  }
+}
+
+function renderChart(canvas, v) {
+  // 매매 실거래(3년) + 전세 실거래(1년) + 추정 적정가 기준선을 한 화면에서 비교한다.
+  const saleTrades = v.trades_3y || [];
+  const jeonseTrades = v.jeonse_trades_1y || [];
+  const allDates = [...saleTrades, ...jeonseTrades].map((t) => t.date).sort();
+  if (!allDates.length) return;
+
+  const epoch = new Date(allDates[0]);
+  const dayOffset = (dateStr) => Math.round((new Date(dateStr) - epoch) / 86400000);
+  const fmtDate = (days) => {
+    const d = new Date(epoch);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+
+  const salePoints = saleTrades.map((t) => ({ x: dayOffset(t.date), y: t.price_10k / 10000, date: t.date }));
+  const jeonsePoints = jeonseTrades.map((t) => ({ x: dayOffset(t.date), y: t.price_10k / 10000, date: t.date }));
+
+  const minX = 0;
+  const maxX = dayOffset(allDates[allDates.length - 1]);
+
+  const datasets = [
+    {
+      label: "매매 실거래(억원)",
+      data: salePoints,
+      backgroundColor: "#2563eb",
+      showLine: false,
+    },
+    {
+      label: "전세 실거래(억원)",
+      data: jeonsePoints,
+      backgroundColor: "#16a34a",
+      showLine: false,
+    },
+  ];
+
+  if (v.fair_price_10k) {
+    datasets.push({
+      label: "추정 적정가",
+      data: [
+        { x: minX, y: v.fair_price_10k / 10000 },
+        { x: maxX, y: v.fair_price_10k / 10000 },
+      ],
+      type: "line",
+      borderColor: "#dc2626",
+      borderDash: [6, 4],
+      borderWidth: 1.5,
+      pointRadius: 0,
+      fill: false,
+    });
+  }
+
+  if (v.peak_price_10k) {
+    datasets.push({
+      label: "전고점(3년)",
+      data: [
+        { x: minX, y: v.peak_price_10k / 10000 },
+        { x: maxX, y: v.peak_price_10k / 10000 },
+      ],
+      type: "line",
+      borderColor: "#9333ea",
+      borderDash: [2, 3],
+      borderWidth: 1.5,
+      pointRadius: 0,
+      fill: false,
+    });
+  }
+
+  new Chart(canvas, {
+    type: "scatter",
+    data: { datasets },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: true, labels: { boxWidth: 10, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            title: (items) => items[0].raw.date || fmtDate(items[0].parsed.x),
+          },
+        },
+      },
+      scales: {
+        x: {
+          type: "linear",
+          min: minX,
+          max: maxX,
+          ticks: {
+            callback: (value) => fmtDate(value),
+            maxTicksLimit: 6,
+          },
+        },
+        y: { title: { display: true, text: "억원" } },
+      },
+    },
+  });
+}
+
+checkHealth();

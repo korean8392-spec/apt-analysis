@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: naver-apt-analyzer
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --app-dir backend --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: MOLIT_SERVICE_KEY
+        sync: false

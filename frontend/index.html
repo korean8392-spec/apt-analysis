@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>아파트 적정가 분석</title>
+<link rel="stylesheet" href="/style.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="brand-mark">🏠</span>
+    <div>
+      <h1>집값레이더</h1>
+      <p class="sub">실거래가(국토교통부 공공데이터) 기반 참고용 추정 · 투자 자문이 아닙니다</p>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section id="key-warning" class="banner warning" hidden>
+    ⚠️ 공공데이터포털 서비스키가 설정되지 않았습니다. <code>.env</code>의 <code>MOLIT_SERVICE_KEY</code>를
+    채운 뒤 서버를 재시작하세요.
+  </section>
+
+  <form id="search-form" class="search-form">
+    <input id="sigungu" type="text" placeholder="시군구 (예: 강남구, 분당구, 수원 영통구)" required />
+    <input id="apt-name" type="text" placeholder="아파트 단지명 (예: 래미안대치팰리스)" required />
+    <button type="submit">검색</button>
+  </form>
+
+  <section id="status" class="status"></section>
+
+  <section id="candidate-section" class="candidate-section" hidden>
+    <p class="hint">검색어와 이름이 비슷한 단지를 찾았습니다. 주소를 확인하고 맞는 단지를 선택하세요.</p>
+    <div id="candidate-list" class="candidate-list"></div>
+  </section>
+
+  <section id="result" class="result" hidden>
+    <div id="summary-card" class="summary-card" hidden>
+      <div class="summary-icon">📊</div>
+      <p id="summary-text"></p>
+    </div>
+
+    <div class="complex-card">
+      <h2 id="complex-title"></h2>
+      <div class="info-grid" id="official-info-grid"></div>
+
+      <div id="map" class="complex-map"></div>
+      <p id="map-note" class="hint" hidden></p>
+
+      <details class="manual-block">
+        <summary>건폐율 / 용적률 / 세대수·준공연도 (직접입력으로 보정)</summary>
+        <p class="hint">
+          건축물대장(표제부) 연동이 설정되어 있으면 건폐율/용적률이 자동으로 채워집니다.
+          값이 비어있거나 부정확하면 여기서 직접 입력해 덮어쓸 수 있습니다 — 한 번 입력하면
+          다음 조회부터 우선 표시됩니다.
+        </p>
+        <form id="manual-complex-form" class="manual-form">
+          <label>건폐율(%) <input type="number" step="0.01" name="building_coverage_ratio" /></label>
+          <label>용적률(%) <input type="number" step="0.01" name="floor_area_ratio" /></label>
+          <label>세대수 <input type="number" name="household_cnt" /></label>
+          <label>준공연도 <input type="number" name="use_approval_year" /></label>
+          <button type="submit">저장</button>
+        </form>
+      </details>
+
+      <details class="manual-block">
+        <summary>동별 표제부 건폐율/용적률 (참고용)</summary>
+        <p class="hint">
+          위 대표값은 단지 전체 기준(총괄표제부)입니다. 아래는 개별 동 표제부 값으로,
+          단지에 따라 비어있을 수 있습니다(0으로 표시되면 등록이 안 된 것).
+        </p>
+        <div id="building-title-list" class="building-title-list"></div>
+      </details>
+    </div>
+
+    <div id="pyeong-filter" class="pyeong-filter"></div>
+    <div id="pyeong-list"></div>
+  </section>
+</main>
+
+<template id="pyeong-card-template">
+  <article class="pyeong-card">
+    <div class="pyeong-header">
+      <h3></h3>
+      <div class="badge-group">
+        <span class="breakout-badge"></span>
+        <span class="confidence-badge"></span>
+      </div>
+    </div>
+
+    <div class="valuation-summary"></div>
+    <p class="calc-note"></p>
+    <div class="judgement-banner"></div>
+
+    <canvas class="trade-chart" height="120"></canvas>
+
+    <details class="manual-block">
+      <summary>현재 매물 개수 / 호가 (직접 입력)</summary>
+      <p class="hint">네이버 부동산에서 확인한 값을 입력해 추정가와 비교해보세요.</p>
+      <form class="manual-listing-form">
+        <label>매물 개수 <input type="number" name="listing_count" /></label>
+        <label>호가 최저(만원) <input type="number" name="ask_price_min" /></label>
+        <label>호가 최고(만원) <input type="number" name="ask_price_max" /></label>
+        <button type="submit">저장</button>
+      </form>
+      <div class="manual-listing-current"></div>
+    </details>
+
+    <details class="manual-block cost-calc-block">
+      <summary>매수 비용 계산기 (중개수수료 · 취득세)</summary>
+      <p class="hint">서울/경기 공통 법정 상한요율 기준 참고용 계산이며, 실제 협의·감면 여부에 따라 달라질 수 있습니다.</p>
+      <div class="cost-calc-input">
+        <label>계산 기준 거래금액(만원)
+          <input type="number" class="cost-calc-price" />
+        </label>
+      </div>
+      <div class="cost-calc-result"></div>
+    </details>
+  </article>
+</template>
+
+<script src="/app.js"></script>
+</body>
+</html>

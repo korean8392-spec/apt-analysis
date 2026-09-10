@@ -61,6 +61,7 @@ async def get_apt_list(sigungu_cd: str) -> list[dict]:
                 "address": " ".join(
                     filter(None, [row.get("as1"), row.get("as2"), row.get("as3"), row.get("as4")])
                 ).strip(),
+                "dong": (row.get("as3") or "").strip(),
                 "bjd_code": row.get("bjdCode"),
             }
         )

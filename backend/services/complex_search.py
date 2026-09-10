@@ -106,6 +106,15 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
             f"실거래가/단지목록 어디에서도 찾지 못했습니다. 단지명을 정확히 입력했는지 확인하세요."
         )
 
+    # 실거래가의 "주공N"류 짧은 단지명은 같은 시군구 내 다른 법정동의 무관한 단지와
+    # 완전히 동일한 표기를 공유하는 경우가 있다(실제 발견: 광명시 "주공12"가 철산동
+    # 철산주공12단지와 하안동의 별개 단지 둘 다에 쓰임). 단지목록에서 확정된 법정동을
+    # 알고 있다면, 그 동과 다른 실거래가 건은 다른 단지의 데이터이므로 제외한다.
+    if matched and matched.get("dong") and matched_trades:
+        same_dong_trades = [t for t in matched_trades if t.get("dong") == matched["dong"]]
+        if same_dong_trades:
+            matched_trades = same_dong_trades
+
     valuations = valuation.build_valuation(matched_trades)
 
     rents_raw = await molit_rent.get_rents(sigungu_cd, months=12)
@@ -120,6 +129,10 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
                 target_norm, molit_apt_list.normalize_name(r["apt_name"])
             )
         ]
+    if matched and matched.get("dong") and matched_rents:
+        same_dong_rents = [r for r in matched_rents if r.get("dong") == matched["dong"]]
+        if same_dong_rents:
+            matched_rents = same_dong_rents
     jeonse_summary = valuation.build_jeonse_summary(matched_rents)
 
     for v in valuations:

@@ -154,6 +154,18 @@ def fuzzy_name_matches_relaxed(query_norm: str, candidate_norm: str) -> bool:
     if q_core and c_core and q_num and c_num and q_core == c_core and q_num == c_num:
         return True
 
+    # 표기3: 실거래가가 지역명 없이 사업주체명("주공")+번호만 쓰는 경우(예: 공식명
+    # "등촌3단지주공아파트"=지역명+번호+주공 vs 실거래가 "주공3"=주공+번호만, 지역명 생략).
+    # 번호가 같고 한쪽 핵심텍스트가 지역명 없이 "주공"뿐이며 다른 쪽 핵심텍스트가 그 "주공"을
+    # 포함하면 같은 단지로 본다 — 이 경우 전국에 흔한 "주공N" 표기가 다른 동네의 별개 단지와
+    # 겹칠 위험이 있으므로, 호출부(complex_search.py)에서 반드시 법정동 일치 여부로 한 번 더
+    # 걸러야 한다.
+    if q_num and c_num and q_num == c_num:
+        if c_core == "주공" and "주공" in q_core:
+            return True
+        if q_core == "주공" and "주공" in c_core:
+            return True
+
     return False
 
 
@@ -167,6 +179,14 @@ def find_candidates(apt_list: list[dict], query_name: str, limit: int = 5) -> li
         a for a in apt_list
         if a not in exact and fuzzy_name_matches(target, normalize_name(a["name"]))
     ]
+    if not exact and not partial:
+        # 단지목록 공식명은 "등촌3단지주공아파트"처럼 번호가 "주공" 앞에 오는 등, 검색어의
+        # 자연스러운 어순("등촌주공3단지")과 순서가 달라 기본 매칭이 실패하는 경우가 있다
+        # (실제 발견) — 이때만 완화된 매칭(핵심텍스트+번호 signature 비교)으로 재시도한다.
+        partial = [
+            a for a in apt_list
+            if fuzzy_name_matches_relaxed(target, normalize_name(a["name"]))
+        ]
     partial.sort(key=lambda a: abs(len(normalize_name(a["name"])) - len(target)))
     return (exact + partial)[:limit]
 

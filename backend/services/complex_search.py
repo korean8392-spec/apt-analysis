@@ -227,6 +227,11 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
             )
         except molit_building.ApiNotRegisteredError as e:
             building_info_error = str(e)
+        except RuntimeError as e:
+            # 건축HUB API는 "서비스 연결실패 에러"처럼 일시적인 게이트웨이 오류를 종종
+            # 반환한다(실제로 확인됨) — 건폐율/용적률은 부가 정보이므로, 이 실패로 검색
+            # 전체를 실패시키지 않고 안내 메시지만 남긴다.
+            building_info_error = f"건축물대장 조회 중 일시적인 오류가 발생했습니다: {e}"
 
     complex_key = make_complex_key(sigungu_cd, apt_name)
 

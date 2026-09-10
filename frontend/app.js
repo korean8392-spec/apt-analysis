@@ -790,4 +790,62 @@ function renderChart(canvas, v) {
   });
 }
 
+function renderLiquidityRanking(data) {
+  const resultEl = $("#liquidity-result");
+  if (!data.ranking.length) {
+    resultEl.innerHTML = `<p class="hint" style="margin:8px 0 0">조건에 맞는 거래가 없습니다. 가격대를 넓혀보세요.</p>`;
+    return;
+  }
+  const rows = data.ranking
+    .map(
+      (r, i) => `
+      <tr>
+        <td class="rank">${i + 1}</td>
+        <td>${r.apt_name} <span style="color:var(--muted);font-weight:400">(${r.dong})</span></td>
+        <td class="count">${r.trade_count}건</td>
+        <td>${fmtWon(r.avg_price_10k)}</td>
+        <td>${r.avg_pyeong ? `${r.avg_pyeong}평` : "-"}</td>
+      </tr>`
+    )
+    .join("");
+  resultEl.innerHTML = `
+    <p class="hint" style="margin:8px 0 0">
+      ${data.sigungu.sido} ${data.sigungu.sigungu} · 최근 ${data.period_months}개월 기준, 조건에 맞는 단지 ${data.total_matched_complexes}곳 중 상위 ${data.ranking.length}곳
+    </p>
+    <div class="liquidity-table-wrap">
+      <table class="liquidity-table">
+        <thead><tr><th>순위</th><th>단지 (동)</th><th>거래건수</th><th>평균가</th><th>평균평형</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+$("#liquidity-search-btn").addEventListener("click", async () => {
+  const resultEl = $("#liquidity-result");
+  const sigungu = $("#liquidity-sigungu").value.trim();
+  if (!sigungu) {
+    resultEl.innerHTML = `<p class="hint" style="margin:8px 0 0;color:#dc2626">시군구를 입력하세요.</p>`;
+    return;
+  }
+  const priceMin = numOrNull($("#liquidity-price-min").value);
+  const priceMax = numOrNull($("#liquidity-price-max").value);
+
+  resultEl.innerHTML = `<p class="hint" style="margin:8px 0 0">조회 중...</p>`;
+  try {
+    const params = new URLSearchParams({ sigungu });
+    if (priceMin) params.set("price_min", priceMin);
+    if (priceMax) params.set("price_max", priceMax);
+    const res = await fetch(`/api/liquidity-ranking?${params}`);
+    const data = await res.json();
+    if (!res.ok) {
+      resultEl.innerHTML = `<p class="hint" style="margin:8px 0 0;color:#dc2626">${data.detail || "조회 실패"}</p>`;
+      return;
+    }
+    renderLiquidityRanking(data);
+  } catch (err) {
+    resultEl.innerHTML = `<p class="hint" style="margin:8px 0 0;color:#dc2626">네트워크 오류: ${err}</p>`;
+  }
+});
+
 checkHealth();

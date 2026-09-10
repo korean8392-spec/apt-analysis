@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 import db
 from config import has_molit_key
-from services import complex_search, summary
+from services import complex_search, liquidity, summary
 
 app = FastAPI(title="네이버 아파트 분석")
 
@@ -53,6 +53,23 @@ async def search(sigungu: str, apt_name: str, kapt_code: str | None = None):
         manual_listings,
     )
     return result
+
+
+@app.get("/api/liquidity-ranking")
+async def liquidity_ranking(
+    sigungu: str, price_min: float | None = None, price_max: float | None = None
+):
+    if not has_molit_key():
+        raise HTTPException(
+            status_code=400,
+            detail="공공데이터포털 서비스키(MOLIT_SERVICE_KEY)가 설정되지 않았습니다.",
+        )
+    try:
+        return await liquidity.rank_liquidity(sigungu, price_min, price_max)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 class ManualListingIn(BaseModel):

@@ -28,14 +28,7 @@ def _parse_bun_ji(jibun_token: str) -> tuple[str, str]:
     return bun.zfill(4), ji.zfill(4)
 
 
-def _resolve_sigungu(sigungu_keyword: str) -> dict:
-    sigungu_candidates = dong_codes.search_sigungu(sigungu_keyword)
-    if not sigungu_candidates:
-        raise ValueError(f"'{sigungu_keyword}'에 해당하는 서울/경기 시군구를 찾지 못했습니다.")
-    if len(sigungu_candidates) > 1:
-        options = ", ".join(f"{r['sido']} {r['sigungu']}" for r in sigungu_candidates)
-        raise ValueError(f"시군구가 여러 개 검색되었습니다. 더 구체적으로 입력하세요: {options}")
-    return sigungu_candidates[0]
+_resolve_sigungu = dong_codes.resolve_sigungu
 
 
 async def find_complex_candidates(sigungu_keyword: str, apt_name: str) -> dict:

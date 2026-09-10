@@ -20,3 +20,14 @@ def search_sigungu(keyword: str) -> list[dict]:
         if keyword in haystack:
             results.append(row)
     return results
+
+
+def resolve_sigungu(keyword: str) -> dict:
+    """검색어가 시군구 하나로 확정되지 않으면(0개/여러개) 에러를 낸다."""
+    candidates = search_sigungu(keyword)
+    if not candidates:
+        raise ValueError(f"'{keyword}'에 해당하는 서울/경기 시군구를 찾지 못했습니다.")
+    if len(candidates) > 1:
+        options = ", ".join(f"{r['sido']} {r['sigungu']}" for r in candidates)
+        raise ValueError(f"시군구가 여러 개 검색되었습니다. 더 구체적으로 입력하세요: {options}")
+    return candidates[0]

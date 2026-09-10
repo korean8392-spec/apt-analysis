@@ -172,6 +172,24 @@ main {
   box-shadow: var(--shadow-card);
 }
 .quick-check-title { font-weight: 800; font-size: 15px; margin-bottom: 12px; }
+
+.accordion summary.quick-check-title {
+  margin-bottom: 0;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.accordion summary.quick-check-title::-webkit-details-marker { display: none; }
+.accordion summary.quick-check-title::after {
+  content: "▾";
+  color: var(--muted);
+  font-size: 12px;
+  transition: transform 0.15s;
+}
+.accordion[open] summary.quick-check-title::after { transform: rotate(180deg); }
+.accordion .hint { margin-top: 10px; }
 .quick-check-form {
   display: flex;
   flex-wrap: wrap;

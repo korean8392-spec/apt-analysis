@@ -333,9 +333,15 @@ function renderResult(data) {
     ? `${subway.station_name}${subway.lines?.length ? ` (${subway.lines.join(", ")})` : ""} · 도보 약 ${subway.walk_minutes}분`
     : "인근 2km 내 역 없음";
 
+  const school = data.school_info;
+  const schoolNote = ' <span style="font-weight:400;color:var(--muted);font-size:11px">(배정 학교 아님, 최단거리 기준)</span>';
+  const schoolLabel = (s) => (s ? `${s.name} · 도보 약 ${Math.round(s.distance_m / 67)}분${schoolNote}` : "-");
+
   const items = [
     ["주소", basis?.address || info?.address || "-"],
     ["인근 지하철", subwayLabel],
+    ["가까운 초등학교", schoolLabel(school?.elementary)],
+    ["가까운 중학교", schoolLabel(school?.middle)],
     ["세대수", manual?.household_cnt ?? basis?.household_cnt ?? "-"],
     ["동수", basis?.dong_cnt ?? "-"],
     ["최고층", basis?.top_floor ?? "-"],

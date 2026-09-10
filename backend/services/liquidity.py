@@ -25,7 +25,7 @@ async def rank_liquidity(
     sigungu_keyword: str,
     price_min_10k: float | None = None,
     price_max_10k: float | None = None,
-    top_n: int = 15,
+    top_n: int = 10,
 ) -> dict:
     sigungu = dong_codes.resolve_sigungu(sigungu_keyword)
     trades = await molit_trade.get_trades(sigungu["code"], months=36)

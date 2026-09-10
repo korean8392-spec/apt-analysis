@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>아파트 적정가 분석</title>
-<link rel="stylesheet" href="/style.css?v=6" />
+<link rel="stylesheet" href="/style.css?v=8" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="//dapi.kakao.com/v2/maps/sdk.js?appkey=6c37b3e9f236a9e3377c48e241ac3e8e&autoload=false"></script>
 </head>
@@ -31,8 +31,8 @@
     <button type="submit">검색</button>
   </form>
 
-  <section id="liquidity-card" class="quick-check-card">
-    <div class="quick-check-title">🏆 가격대별 환금성 순위</div>
+  <details id="liquidity-card" class="quick-check-card accordion">
+    <summary class="quick-check-title">🏆 가격대별 환금성 순위</summary>
     <p class="hint">최근 1년 실거래 건수가 많을수록 사고팔기 쉬운(환금성 좋은) 단지로 봅니다.</p>
     <div class="quick-check-form">
       <label>시군구
@@ -47,7 +47,7 @@
       <button id="liquidity-search-btn" type="button">순위 보기</button>
     </div>
     <div id="liquidity-result"></div>
-  </section>
+  </details>
 
   <section id="landing-hero" class="landing-hero">
     <div class="hero-copy">
@@ -186,6 +186,6 @@
   </article>
 </template>
 
-<script src="/app.js?v=6"></script>
+<script src="/app.js?v=8"></script>
 </body>
 </html>

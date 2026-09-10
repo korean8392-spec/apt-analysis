@@ -3,7 +3,9 @@ from collections import Counter
 
 from config import has_molit_key
 from clients import geocode as geocode_client
-from clients import molit_apt_basis, molit_apt_list, molit_building, molit_rent, molit_trade, subway as subway_client
+from clients import molit_apt_basis, molit_apt_list, molit_building, molit_rent, molit_trade
+from clients import schools as schools_client
+from clients import subway as subway_client
 from services import dong_codes, valuation
 
 
@@ -191,8 +193,14 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
     # 인근 지하철역(역명/노선) — 좌표가 있어야 조회 가능하며, 부가 정보이므로 실패해도
     # 검색 전체에 영향을 주지 않는다(subway_client 내부에서 이미 예외를 흡수함).
     subway_info = None
+    school_info = None
     if geocode_result:
         subway_info = await subway_client.find_nearest_station(
+            geocode_result["lat"], geocode_result["lon"]
+        )
+        # 인근 초·중학교 — "가장 가까운" 학교일 뿐 실제 배정 학교가 아니다(통학구역
+        # 경계 데이터는 공개 API로 제공되지 않음). 프런트에서 반드시 그 점을 명시한다.
+        school_info = await schools_client.find_nearby_schools(
             geocode_result["lat"], geocode_result["lon"]
         )
 
@@ -247,6 +255,7 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
         "building_info_error": building_info_error,
         "building_title_list": building_title_list,
         "subway_info": subway_info,
+        "school_info": school_info,
         "valuations": valuations,
         "trade_sample_total": len(matched_trades),
         "geocode": geocode_result,

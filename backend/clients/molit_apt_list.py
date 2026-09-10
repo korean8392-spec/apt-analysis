@@ -69,12 +69,18 @@ async def get_apt_list(sigungu_cd: str) -> list[dict]:
 
 
 def normalize_name(name: str) -> str:
-    """단지명 비교용 정규화: 공백/괄호/특수문자 제거."""
+    """단지명 비교용 정규화: 공백/괄호/특수문자 제거 + 의미 없는 접미사 제거.
+
+    "목련아파트"의 실제 등록명이 "목련"뿐인 경우처럼, "아파트/apt" 접미사가 있고
+    없고의 표기 차이만으로 오매칭 방지 로직(fuzzy_name_matches의 짧은 이름 가드)에
+    걸려 못 찾는 사례가 있어(실제 발견됨), 식별에 의미 없는 접미사는 미리 제거한다."""
     import re
 
     name = re.sub(r"\(.*?\)", "", name)
     name = re.sub(r"[^0-9A-Za-z가-힣]", "", name)
-    return name.strip().lower()
+    name = name.strip().lower()
+    stripped = re.sub(r"(아파트|apt)$", "", name)
+    return stripped or name
 
 
 def fuzzy_name_matches(query_norm: str, candidate_norm: str) -> bool:
@@ -94,6 +100,59 @@ def fuzzy_name_matches(query_norm: str, candidate_norm: str) -> bool:
         return True
     if candidate_norm in query_norm:
         return len(candidate_norm) >= 3 and len(candidate_norm) >= len(query_norm) * 0.5
+    return False
+
+
+def _strip_complex_number(name_norm: str) -> str:
+    """'목련3단지우성' → '목련우성'처럼 'N단지'/'제N단지' 표기를 제거한다."""
+    import re
+
+    return re.sub(r"제?\d+단지", "", name_norm)
+
+
+def _extract_signature(name_norm: str) -> tuple[str, str | None]:
+    """단지 번호를 이름 내 위치와 분리해서 (핵심텍스트, 번호)로 뽑아낸다.
+
+    'N단지' 표기가 아니라 단지 번호의 "위치"가 등록기관마다 다른 경우를 위한 것이다
+    (실제 발견: 단지목록 "목동8단지" vs 실거래가 "목동신시가지8" — 숫자가 중간이 아니라
+    끝에 붙고 "신시가지"라는 말이 끼어 있음). 마지막 숫자 그룹을 단지 번호로 보고
+    나머지에서 신시가지/단지/제 같은 연결어를 지운 걸 핵심텍스트로 삼는다."""
+    import re
+
+    last_digit = None
+    for m in re.finditer(r"\d+", name_norm):
+        last_digit = m
+    if not last_digit:
+        return re.sub(r"(신시가지|단지|제)", "", name_norm), None
+    number = last_digit.group(0)
+    rest = name_norm[: last_digit.start()] + name_norm[last_digit.end() :]
+    core = re.sub(r"(신시가지|단지|제)", "", rest)
+    return core, number
+
+
+def fuzzy_name_matches_relaxed(query_norm: str, candidate_norm: str) -> bool:
+    """fuzzy_name_matches보다 한 단계 더 관대한 매칭 — 실거래가 데이터와 단지목록
+    데이터의 단지 번호 표기 방식이 다른 실제 사례들을 보완한다. 이미 특정 단지가
+    확정된 후 그 단지의 실거래 내역을 찾는 단계에서만 쓴다.
+
+    단지번호를 뗀 뒤에는 포함관계가 아니라 "완전히 같은 문자열"일 때만 매칭한다 —
+    포함관계를 허용하면 "목련우성"(번호 없음)이 "목련우성5"/"목련우성7"(다른 단지)의
+    접두사가 되어 서로 다른 단지끼리 뭉쳐버린다(실제로 발견된 오탐)."""
+    if fuzzy_name_matches(query_norm, candidate_norm):
+        return True
+
+    # 표기1: 'N단지'가 아예 빠진 경우 (예: 공식명 "목련3단지우성" vs 실거래가 "목련우성")
+    q2, c2 = _strip_complex_number(query_norm), _strip_complex_number(candidate_norm)
+    if (q2 != query_norm or c2 != candidate_norm) and q2 and c2 and q2 == c2:
+        return True
+
+    # 표기2: 번호는 있지만 위치/연결어가 다른 경우 (예: "목동8단지" vs "목동신시가지8") —
+    # 핵심텍스트와 번호가 둘 다 일치할 때만 인정한다(번호가 다르면 다른 단지이므로 제외).
+    q_core, q_num = _extract_signature(query_norm)
+    c_core, c_num = _extract_signature(candidate_norm)
+    if q_core and c_core and q_num and c_num and q_core == c_core and q_num == c_num:
+        return True
+
     return False
 
 

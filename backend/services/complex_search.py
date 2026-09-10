@@ -90,6 +90,15 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
         t for t in trades_raw
         if molit_apt_list.fuzzy_name_matches(target_norm, molit_apt_list.normalize_name(t["apt_name"]))
     ]
+    if not matched_trades and matched:
+        # 확정된 단지인데도 못 찾으면, "N단지" 표기 유무 차이(예: 공식명 "목련3단지우성"
+        # vs 실거래가 표기 "목련우성")를 보완하는 완화된 매칭으로 재시도한다.
+        matched_trades = [
+            t for t in trades_raw
+            if molit_apt_list.fuzzy_name_matches_relaxed(
+                target_norm, molit_apt_list.normalize_name(t["apt_name"])
+            )
+        ]
 
     if not matched_trades and not matched:
         raise ValueError(
@@ -104,6 +113,13 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
         r for r in rents_raw
         if molit_apt_list.fuzzy_name_matches(target_norm, molit_apt_list.normalize_name(r["apt_name"]))
     ]
+    if not matched_rents and matched:
+        matched_rents = [
+            r for r in rents_raw
+            if molit_apt_list.fuzzy_name_matches_relaxed(
+                target_norm, molit_apt_list.normalize_name(r["apt_name"])
+            )
+        ]
     jeonse_summary = valuation.build_jeonse_summary(matched_rents)
 
     for v in valuations:

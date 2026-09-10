@@ -4,6 +4,7 @@ from collections import Counter
 from config import has_molit_key
 from clients import geocode as geocode_client
 from clients import molit_apt_basis, molit_apt_list, molit_building, molit_rent, molit_trade
+from clients import commercial as commercial_client
 from clients import schools as schools_client
 from clients import subway as subway_client
 from services import dong_codes, valuation
@@ -203,6 +204,13 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
         school_info = await schools_client.find_nearby_schools(
             geocode_result["lat"], geocode_result["lon"]
         )
+        # 인근 상권 밀집도(반경 500m 음식점/카페/편의점 수) — 이름 붙은 상권 경계
+        # 데이터는 공개 API로 없어서 개수를 밀집도 근사치로 쓴다.
+        commercial_info = await commercial_client.get_commercial_density(
+            geocode_result["lat"], geocode_result["lon"]
+        )
+    else:
+        commercial_info = None
 
     # 건폐율/용적률 (건축물대장 표제부) — bjdCode(10자리, 시군구5+법정동5) + 지번 필요.
     building_info = None
@@ -256,6 +264,7 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
         "building_title_list": building_title_list,
         "subway_info": subway_info,
         "school_info": school_info,
+        "commercial_info": commercial_info,
         "valuations": valuations,
         "trade_sample_total": len(matched_trades),
         "geocode": geocode_result,

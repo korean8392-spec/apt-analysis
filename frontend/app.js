@@ -369,6 +369,7 @@ function renderResult(data) {
 
   renderMap(data);
   renderBuildingTitleList(data.building_title_list || []);
+  renderCommercialDensity(data.commercial_info);
 
   const manualForm = $("#manual-complex-form");
   manualForm.building_coverage_ratio.value =
@@ -478,6 +479,22 @@ function renderBuildingTitleList(list) {
       </div>`
     )
     .join("");
+}
+
+function renderCommercialDensity(info) {
+  const el = $("#commercial-density");
+  if (!el) return;
+  if (!info) {
+    el.innerHTML = `<p class="hint" style="margin:0">조회된 상권 정보가 없습니다.</p>`;
+    return;
+  }
+  el.innerHTML = `
+    <div class="cc-meta">
+      <div><div class="label">음식점</div><div class="value">${info.restaurant}곳</div></div>
+      <div><div class="label">카페</div><div class="value">${info.cafe}곳</div></div>
+      <div><div class="label">편의점</div><div class="value">${info.convenience}곳</div></div>
+    </div>
+  `;
 }
 
 function numOrNull(v) {

@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>아파트 적정가 분석</title>
-<link rel="stylesheet" href="/style.css?v=9" />
+<link rel="stylesheet" href="/style.css?v=10" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="//dapi.kakao.com/v2/maps/sdk.js?appkey=6c37b3e9f236a9e3377c48e241ac3e8e&autoload=false"></script>
 </head>
@@ -143,6 +143,12 @@
       <p id="map-note" class="hint" hidden></p>
 
       <details class="manual-block">
+        <summary>🏬 인근 상권 밀집도 (반경 500m)</summary>
+        <p class="hint">이름 붙은 상권 구역이 아니라, 반경 500m 내 음식점·카페·편의점 개수로 어림한 밀집도입니다.</p>
+        <div id="commercial-density"></div>
+      </details>
+
+      <details class="manual-block">
         <summary>건폐율 / 용적률 / 세대수·준공연도 (직접입력으로 보정)</summary>
         <p class="hint">
           건축물대장(표제부) 연동이 설정되어 있으면 건폐율/용적률이 자동으로 채워집니다.
@@ -214,6 +220,6 @@
   </article>
 </template>
 
-<script src="/app.js?v=9"></script>
+<script src="/app.js?v=10"></script>
 </body>
 </html>

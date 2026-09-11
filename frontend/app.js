@@ -1024,3 +1024,9 @@ async function runBudgetScreening() {
 $("#budget-search-btn").addEventListener("click", runBudgetScreening);
 
 checkHealth();
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}

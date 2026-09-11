@@ -11,6 +11,8 @@
 data.go.kr에서 "국토교통부_건축HUB_건축물대장정보 서비스"를 별도로 활용신청해야 동작한다.
 """
 
+import asyncio
+
 import httpx
 
 from config import MOLIT_SERVICE_KEY
@@ -50,7 +52,7 @@ def _extract_rows(body: dict) -> list[dict]:
     return []
 
 
-async def _call(url: str, params: dict) -> list[dict]:
+async def _call_once(url: str, params: dict) -> list[dict]:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(url, params=params)
         try:
@@ -71,6 +73,19 @@ async def _call(url: str, params: dict) -> list[dict]:
         raise RuntimeError(f"BldRgstHubService API 오류: {err.get('returnAuthMsg', err)}")
 
     return _extract_rows(data.get("response", {}).get("body", {}))
+
+
+async def _call(url: str, params: dict) -> list[dict]:
+    """"서비스 연결실패 에러"류의 일시적 실패가 실제로 잦아(같은 요청을 5번 중 4번
+    실패하는 것을 확인) 1회 재시도한다. 키 미등록(ApiNotRegisteredError)은 재시도해도
+    똑같이 실패하는 설정 문제라 재시도하지 않는다."""
+    try:
+        return await _call_once(url, params)
+    except ApiNotRegisteredError:
+        raise
+    except Exception:
+        await asyncio.sleep(1.2)
+        return await _call_once(url, params)
 
 
 async def get_building_recap_info(
@@ -125,15 +140,26 @@ async def get_building_recap_info_best(
     등록 상태가 달라, 우연히 고른 지번이 일부 동만 담은 부실한 레코드일 수 있다(실제
     사례: 상계주공3단지 730-2는 98세대만 담긴 레코드, 737번지가 2115세대짜리 대표 레코드)."""
     results = []
+    last_error = None
     for jibun_token in jibun_candidates:
         if "-" in jibun_token:
             bun, ji = jibun_token.split("-", 1)
         else:
             bun, ji = jibun_token, "0"
-        info = await get_building_recap_info(sigungu_cd, bjdong_cd, bun.zfill(4), ji.zfill(4))
+        try:
+            info = await get_building_recap_info(sigungu_cd, bjdong_cd, bun.zfill(4), ji.zfill(4))
+        except ApiNotRegisteredError:
+            raise
+        except RuntimeError as e:
+            # 지번 후보 하나가 일시적으로 실패해도(재시도까지 실패한 경우) 나머지
+            # 후보로 계속 시도한다 — 한 지번의 일시적 오류로 전체를 실패시키지 않는다.
+            last_error = e
+            continue
         if info:
             results.append(info)
 
+    if not results and last_error:
+        raise last_error
     if not results:
         return None
 

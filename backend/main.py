@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -7,6 +8,9 @@ from pydantic import BaseModel
 import db
 from config import has_molit_key
 from services import complex_search, liquidity, screening, summary
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("appt")
 
 app = FastAPI(title="네이버 아파트 분석")
 
@@ -41,6 +45,11 @@ async def search(sigungu: str, apt_name: str, kapt_code: str | None = None):
         raise HTTPException(status_code=404, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception(
+            "search failed unexpectedly: sigungu=%s apt_name=%s kapt_code=%s", sigungu, apt_name, kapt_code
+        )
+        raise HTTPException(status_code=500, detail=f"예상치 못한 오류: {type(e).__name__}: {e}")
     manual_info = db.get_manual_complex_info(result["complex_key"])
     manual_listings = db.get_manual_listings(result["complex_key"])
     result["manual_complex_info"] = manual_info

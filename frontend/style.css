@@ -136,6 +136,11 @@ main {
   letter-spacing: -0.02em;
   color: var(--text);
 }
+.hero-vocative {
+  color: var(--accent);
+  font-family: "Black Han Sans", "Pretendard", sans-serif;
+  font-weight: 400;
+}
 .hero-copy p {
   margin: 0 auto;
   max-width: 480px;

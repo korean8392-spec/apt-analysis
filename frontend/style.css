@@ -121,6 +121,13 @@ main {
 .status { min-height: 20px; color: var(--muted); font-size: 13px; margin-bottom: 8px; padding-left: 4px; }
 
 .landing-hero { margin: 8px 0 28px; }
+
+.section-label {
+  margin: 0 0 8px 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
 .hero-copy { text-align: center; padding: 28px 12px 8px; }
 .hero-copy h2 {
   margin: 0 0 10px;

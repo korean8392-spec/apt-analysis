@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>아빠트 · APPT</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-<link rel="stylesheet" href="/style.css?v=12" />
+<link rel="stylesheet" href="/style.css?v=13" />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&display=swap" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="//dapi.kakao.com/v2/maps/sdk.js?appkey=6c37b3e9f236a9e3377c48e241ac3e8e&autoload=false"></script>
@@ -35,58 +35,6 @@
     채운 뒤 서버를 재시작하세요.
   </section>
 
-  <form id="search-form" class="search-form">
-    <input id="sigungu" type="text" placeholder="시군구 (예: 강남구, 분당구, 수원 영통구)" required />
-    <input id="apt-name" type="text" placeholder="아파트 단지명 (예: 래미안대치팰리스)" required />
-    <button type="submit">검색</button>
-  </form>
-
-  <details id="liquidity-card" class="quick-check-card accordion">
-    <summary class="quick-check-title">🏆 가격대별 환금성 순위</summary>
-    <p class="hint">최근 1년 실거래 건수가 많을수록 사고팔기 쉬운(환금성 좋은) 단지로 봅니다.</p>
-    <div class="quick-check-form">
-      <label>시군구
-        <input id="liquidity-sigungu" type="text" placeholder="예: 강남구" />
-      </label>
-      <label>가격 최소(만원)
-        <input id="liquidity-price-min" type="number" placeholder="예: 50000" />
-      </label>
-      <label>가격 최대(만원)
-        <input id="liquidity-price-max" type="number" placeholder="예: 70000" />
-      </label>
-      <button id="liquidity-search-btn" type="button">순위 보기</button>
-    </div>
-    <div id="liquidity-result"></div>
-  </details>
-
-  <details id="budget-card" class="quick-check-card accordion">
-    <summary class="quick-check-title">💰 내 예산으로 단지 후보 찾기</summary>
-    <p class="hint">
-      보유 현금과 연소득으로 대략적인 예산을 계산하고, 그 예산 내에서 최근 1년 거래가 활발한 단지 후보 5곳을 보여드립니다.
-      대출 한도는 DSR 40% 기준 간이 추정치로 실제 은행 승인액과 다를 수 있어 정확한 한도는 은행 상담이 필요하며,
-      이 목록은 조건에 맞는 후보를 데이터 기준으로 정렬해 보여드리는 것으로 투자 자문이 아닙니다.
-    </p>
-    <div class="quick-check-form">
-      <label>시군구
-        <input id="budget-sigungu" type="text" placeholder="예: 강남구" />
-      </label>
-      <label>보유 현금(만원)
-        <input id="budget-cash" type="number" placeholder="예: 30000" />
-      </label>
-      <label>연소득(만원)
-        <input id="budget-income" type="number" placeholder="예: 8000" />
-      </label>
-      <label>대출금리(%)
-        <input id="budget-rate" type="number" value="4.5" step="0.1" />
-      </label>
-      <label>대출기간(년)
-        <input id="budget-years" type="number" value="30" />
-      </label>
-      <button id="budget-search-btn" type="button">예산 계산 + 후보 보기</button>
-    </div>
-    <div id="budget-result"></div>
-  </details>
-
   <section id="landing-hero" class="landing-hero">
     <div class="hero-copy">
       <h2>이 집, 이 가격에 사도 될까?</h2>
@@ -115,6 +63,60 @@
       </div>
     </div>
   </section>
+
+  <p class="section-label">단지명을 알고 계시다면 바로 검색하세요</p>
+  <form id="search-form" class="search-form">
+    <input id="sigungu" type="text" placeholder="시군구 (예: 강남구, 분당구, 수원 영통구)" required />
+    <input id="apt-name" type="text" placeholder="아파트 단지명 (예: 래미안대치팰리스)" required />
+    <button type="submit">검색</button>
+  </form>
+
+  <p class="section-label">단지를 아직 못 정했다면, 조건으로 찾아보세요</p>
+  <details id="liquidity-card" class="quick-check-card accordion">
+    <summary class="quick-check-title">🏆 가격대별 환금성 순위</summary>
+    <p class="hint">시군구와 가격대를 입력하면, 최근 1년 실거래 건수가 많은(사고팔기 쉬운) 단지 순으로 보여드립니다.</p>
+    <div class="quick-check-form">
+      <label>시군구
+        <input id="liquidity-sigungu" type="text" placeholder="예: 강남구" />
+      </label>
+      <label>가격 최소(만원)
+        <input id="liquidity-price-min" type="number" placeholder="예: 50000" />
+      </label>
+      <label>가격 최대(만원)
+        <input id="liquidity-price-max" type="number" placeholder="예: 70000" />
+      </label>
+      <button id="liquidity-search-btn" type="button">순위 보기</button>
+    </div>
+    <div id="liquidity-result"></div>
+  </details>
+
+  <details id="budget-card" class="quick-check-card accordion">
+    <summary class="quick-check-title">💰 내 예산으로 단지 후보 찾기</summary>
+    <p class="hint">
+      보유 현금과 연소득을 입력하면 대략적인 예산을 계산하고, 그 예산 내에서 최근 1년 거래가 활발한 단지 후보 5곳을 보여드립니다.
+      대출 한도는 DSR 40% 기준 간이 추정치로 실제 은행 승인액과 다를 수 있어 정확한 한도는 은행 상담이 필요하며,
+      이 목록은 조건에 맞는 후보를 데이터 기준으로 정렬해 보여드리는 것으로 투자 자문이 아닙니다.
+    </p>
+    <div class="quick-check-form">
+      <label>시군구
+        <input id="budget-sigungu" type="text" placeholder="예: 강남구" />
+      </label>
+      <label>보유 현금(만원)
+        <input id="budget-cash" type="number" placeholder="예: 30000" />
+      </label>
+      <label>연소득(만원)
+        <input id="budget-income" type="number" placeholder="예: 8000" />
+      </label>
+      <label>대출금리(%)
+        <input id="budget-rate" type="number" value="4.5" step="0.1" />
+      </label>
+      <label>대출기간(년)
+        <input id="budget-years" type="number" value="30" />
+      </label>
+      <button id="budget-search-btn" type="button">예산 계산 + 후보 보기</button>
+    </div>
+    <div id="budget-result"></div>
+  </details>
 
   <section id="status" class="status"></section>
 

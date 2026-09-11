@@ -1,13 +1,15 @@
 :root {
   color-scheme: light;
-  --bg: #f4f6fa;
-  --card-bg: #ffffff;
-  --border: #e7eaf0;
-  --text: #17191f;
-  --muted: #7b8394;
-  --accent: #3182f6;
-  --accent-dark: #1b64da;
-  --accent-soft: #eaf2ff;
+  --bg: #f6f4ee;
+  --card-bg: #fcfbf7;
+  --border: #dedacc;
+  --text: #1c2333;
+  --muted: #746f60;
+  --accent: #2f5fd6;
+  --accent-dark: #1f3fa0;
+  --accent-soft: #e8eefc;
+  --seal-red: #c6362e;
+  --seal-red-soft: #f7e4e2;
   --good: #12b886;
   --good-soft: #e6faf3;
   --warn: #f59f00;
@@ -16,7 +18,7 @@
   --bad-soft: #ffedf1;
   --radius-lg: 18px;
   --radius-md: 12px;
-  --shadow-card: 0 1px 2px rgba(20, 24, 33, 0.04), 0 8px 24px rgba(20, 24, 33, 0.05);
+  --shadow-card: 0 1px 2px rgba(28, 35, 51, 0.05), 0 8px 24px rgba(28, 35, 51, 0.06);
   font-family: "Pretendard", -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
 }
 
@@ -40,16 +42,23 @@ header {
 }
 .brand { max-width: 900px; margin: 0 auto; display: flex; align-items: center; gap: 10px; }
 .brand-mark {
-  font-size: 22px;
   width: 38px;
   height: 38px;
+  flex: none;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent-soft);
-  border-radius: 10px;
 }
-header h1 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; display: flex; align-items: baseline; gap: 7px; }
+.brand-mark svg { display: block; width: 100%; height: 100%; }
+header h1 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 400;
+  font-family: "Black Han Sans", "Pretendard", sans-serif;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
 header .sub { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
 .brand-en {
   font-size: 10.5px;

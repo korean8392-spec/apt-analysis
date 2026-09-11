@@ -368,8 +368,7 @@ function renderResult(data) {
   }
 
   renderMap(data);
-  renderBuildingTitleList(data.building_title_list || []);
-  renderCommercialDensity(data.commercial_info);
+  renderCommercialDensity(data.commercial_info, data.geocode);
 
   const manualForm = $("#manual-complex-form");
   manualForm.building_coverage_ratio.value =
@@ -463,31 +462,24 @@ async function renderMap(data) {
   }
 }
 
-function renderBuildingTitleList(list) {
-  const el = $("#building-title-list");
-  if (!list.length) {
-    el.innerHTML = `<p class="hint" style="margin:0">조회된 개별 동 표제부가 없습니다.</p>`;
-    return;
-  }
-  el.innerHTML = list
-    .map(
-      (d) => `
-      <div class="dong-item">
-        <div class="name">${d.dong_name || "-"}</div>
-        <div class="ratios">건폐 ${d.building_coverage_ratio ?? 0}% · 용적 ${d.floor_area_ratio ?? 0}%</div>
-        <div class="ratios">${d.ground_floor_cnt ?? "-"}층 · ${d.household_cnt ?? 0}세대</div>
-      </div>`
-    )
-    .join("");
-}
+let commercialCircle = null;
 
-function renderCommercialDensity(info) {
+function renderCommercialDensity(info, geo) {
   const el = $("#commercial-density");
+  const detailsEl = $("#commercial-density-details");
   if (!el) return;
+
+  if (commercialCircle) {
+    commercialCircle.setMap(null);
+    commercialCircle = null;
+  }
+  if (detailsEl) detailsEl.ontoggle = null;
+
   if (!info) {
     el.innerHTML = `<p class="hint" style="margin:0">조회된 상권 정보가 없습니다.</p>`;
     return;
   }
+
   el.innerHTML = `
     <div class="cc-meta">
       <div><div class="label">음식점</div><div class="value">${info.restaurant}곳</div></div>
@@ -495,6 +487,30 @@ function renderCommercialDensity(info) {
       <div><div class="label">편의점</div><div class="value">${info.convenience}곳</div></div>
     </div>
   `;
+
+  // 지도에는 기본으로 안 그리고, 이 섹션을 펼쳤을 때만 반경 원을 보여준다 —
+  // 지도를 평소엔 깔끔하게 유지하되(사용자 요청), 밀집도가 지도에도 반영되게 한다.
+  if (detailsEl) {
+    detailsEl.ontoggle = () => {
+      if (commercialCircle) {
+        commercialCircle.setMap(null);
+        commercialCircle = null;
+      }
+      if (!detailsEl.open || !geo || !kakaoMap || !window.kakao) return;
+      const total = (info.restaurant || 0) + (info.cafe || 0) + (info.convenience || 0);
+      const intensity = Math.min(0.55, Math.max(0.15, total / 400));
+      commercialCircle = new kakao.maps.Circle({
+        center: new kakao.maps.LatLng(geo.lat, geo.lon),
+        radius: info.radius_m || 500,
+        strokeWeight: 1,
+        strokeColor: "#2F5FD6",
+        strokeOpacity: 0.5,
+        fillColor: "#2F5FD6",
+        fillOpacity: intensity,
+      });
+      commercialCircle.setMap(kakaoMap);
+    };
+  }
 }
 
 function numOrNull(v) {

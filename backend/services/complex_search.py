@@ -22,15 +22,6 @@ def _extract_jibun_token(addr: str) -> str | None:
     return None
 
 
-def _parse_bun_ji(jibun_token: str) -> tuple[str, str]:
-    """건축HUB API는 본번/부번을 4자리로 0-패딩해야 매칭된다(실제 호출로 확인)."""
-    if "-" in jibun_token:
-        bun, ji = jibun_token.split("-", 1)
-    else:
-        bun, ji = jibun_token, "0"
-    return bun.zfill(4), ji.zfill(4)
-
-
 _resolve_sigungu = dong_codes.resolve_sigungu
 
 
@@ -232,15 +223,10 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
         if jb not in jibun_candidates:
             jibun_candidates.append(jb)
 
-    building_title_list = []
     if bjd_code_10 and len(bjd_code_10) == 10 and jibun_candidates:
         try:
             building_info = await molit_building.get_building_recap_info_best(
                 bjd_code_10[:5], bjd_code_10[5:10], jibun_candidates
-            )
-            bun, ji = _parse_bun_ji(jibun_candidates[0])
-            building_title_list = await molit_building.get_building_title_list(
-                bjd_code_10[:5], bjd_code_10[5:10], bun, ji
             )
         except molit_building.ApiNotRegisteredError as e:
             building_info_error = str(e)
@@ -261,7 +247,6 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
         "basis_info_error": basis_info_error,
         "building_info": building_info,
         "building_info_error": building_info_error,
-        "building_title_list": building_title_list,
         "subway_info": subway_info,
         "school_info": school_info,
         "commercial_info": commercial_info,

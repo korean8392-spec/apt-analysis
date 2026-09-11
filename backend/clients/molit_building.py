@@ -17,7 +17,6 @@ from config import MOLIT_SERVICE_KEY
 import db
 
 RECAP_URL = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrRecapTitleInfo"
-TITLE_URL = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo"
 
 
 class ApiNotRegisteredError(RuntimeError):
@@ -144,42 +143,3 @@ async def get_building_recap_info_best(
     return max(results, key=lambda r: r["household_cnt"] or 0)
 
 
-async def get_building_title_list(
-    sigungu_cd: str, bjdong_cd: str, bun: str, ji: str
-) -> list[dict]:
-    """개별 동 표제부 목록(참고용) — 주건축물(mainAtchGbCd=='0')만 반환한다.
-    이 단지에서는 값이 비어있어도(0) 다른 단지에서는 채워져 있을 수 있어 있는 그대로 보여준다."""
-    cache_key = f"molit_building_title_list:{sigungu_cd}:{bjdong_cd}:{bun}:{ji}"
-    cached = db.cache_get(cache_key, max_age_sec=60 * 60 * 24 * 180)
-    if cached is not None:
-        return cached
-
-    params = {
-        "serviceKey": MOLIT_SERVICE_KEY,
-        "sigunguCd": sigungu_cd,
-        "bjdongCd": bjdong_cd,
-        "platGbCd": "0",
-        "bun": bun,
-        "ji": ji,
-        "numOfRows": "100",
-        "pageNo": "1",
-        "_type": "json",
-    }
-    rows = await _call(TITLE_URL, params)
-
-    result = []
-    for row in rows:
-        if row.get("mainAtchGbCd") != "0":
-            continue
-        result.append(
-            {
-                "dong_name": row.get("dongNm"),
-                "building_coverage_ratio": _clean_float(row.get("bcRat")),
-                "floor_area_ratio": _clean_float(row.get("vlRat")),
-                "household_cnt": row.get("hhldCnt"),
-                "ground_floor_cnt": row.get("grndFlrCnt"),
-                "underground_floor_cnt": row.get("ugrndFlrCnt"),
-            }
-        )
-    db.cache_set(cache_key, result)
-    return result

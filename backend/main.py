@@ -49,7 +49,8 @@ async def search(sigungu: str, apt_name: str, kapt_code: str | None = None):
         logger.exception(
             "search failed unexpectedly: sigungu=%s apt_name=%s kapt_code=%s", sigungu, apt_name, kapt_code
         )
-        raise HTTPException(status_code=500, detail=f"예상치 못한 오류: {type(e).__name__}: {e}")
+        url = getattr(getattr(e, "request", None), "url", None)
+        raise HTTPException(status_code=500, detail=f"예상치 못한 오류: {type(e).__name__}: {e} (url={url})")
     manual_info = db.get_manual_complex_info(result["complex_key"])
     manual_listings = db.get_manual_listings(result["complex_key"])
     result["manual_complex_info"] = manual_info

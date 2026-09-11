@@ -462,17 +462,25 @@ async function renderMap(data) {
   }
 }
 
-let commercialCircle = null;
+const DENSITY_CATEGORIES = [
+  { key: "restaurant", label: "음식점", color: "#E8863D" },
+  { key: "cafe", label: "카페", color: "#8B6244" },
+  { key: "convenience", label: "편의점", color: "#3FA66B" },
+];
+
+let commercialDots = [];
+
+function clearCommercialDots() {
+  commercialDots.forEach((dot) => dot.setMap(null));
+  commercialDots = [];
+}
 
 function renderCommercialDensity(info, geo) {
   const el = $("#commercial-density");
   const detailsEl = $("#commercial-density-details");
   if (!el) return;
 
-  if (commercialCircle) {
-    commercialCircle.setMap(null);
-    commercialCircle = null;
-  }
+  clearCommercialDots();
   if (detailsEl) detailsEl.ontoggle = null;
 
   if (!info) {
@@ -481,34 +489,34 @@ function renderCommercialDensity(info, geo) {
   }
 
   el.innerHTML = `
-    <div class="cc-meta">
-      <div><div class="label">음식점</div><div class="value">${info.restaurant}곳</div></div>
-      <div><div class="label">카페</div><div class="value">${info.cafe}곳</div></div>
-      <div><div class="label">편의점</div><div class="value">${info.convenience}곳</div></div>
+    <div class="density-chips">
+      ${DENSITY_CATEGORIES.map(
+        (c) => `
+        <span class="density-chip" style="background:${c.color}1a;color:${c.color}">
+          <span class="dot" style="background:${c.color}"></span>${c.label} <b>${info[c.key]}곳</b>
+        </span>`
+      ).join("")}
     </div>
   `;
 
-  // 지도에는 기본으로 안 그리고, 이 섹션을 펼쳤을 때만 반경 원을 보여준다 —
+  // 지도에는 기본으로 안 그리고, 이 섹션을 펼쳤을 때만 카테고리별 색깔 점을 찍는다 —
   // 지도를 평소엔 깔끔하게 유지하되(사용자 요청), 밀집도가 지도에도 반영되게 한다.
+  // 전체를 음영으로 덮는 대신 실제 위치를 점으로 찍어 어디에 몰려있는지 보이게 했다.
   if (detailsEl) {
     detailsEl.ontoggle = () => {
-      if (commercialCircle) {
-        commercialCircle.setMap(null);
-        commercialCircle = null;
-      }
+      clearCommercialDots();
       if (!detailsEl.open || !geo || !kakaoMap || !window.kakao) return;
-      const total = (info.restaurant || 0) + (info.cafe || 0) + (info.convenience || 0);
-      const intensity = Math.min(0.55, Math.max(0.15, total / 400));
-      commercialCircle = new kakao.maps.Circle({
-        center: new kakao.maps.LatLng(geo.lat, geo.lon),
-        radius: info.radius_m || 500,
-        strokeWeight: 1,
-        strokeColor: "#2F5FD6",
-        strokeOpacity: 0.5,
-        fillColor: "#2F5FD6",
-        fillOpacity: intensity,
+      DENSITY_CATEGORIES.forEach((c) => {
+        for (const place of info.places?.[c.key] || []) {
+          const overlay = new kakao.maps.CustomOverlay({
+            position: new kakao.maps.LatLng(place.lat, place.lon),
+            content: `<div class="map-dot" style="background:${c.color}" title="${place.name}"></div>`,
+            yAnchor: 0.5,
+          });
+          overlay.setMap(kakaoMap);
+          commercialDots.push(overlay);
+        }
       });
-      commercialCircle.setMap(kakaoMap);
     };
   }
 }
@@ -838,7 +846,7 @@ function renderLiquidityRanking(data) {
   const rows = data.ranking
     .map(
       (r, i) => `
-      <tr>
+      <tr class="clickable-row" data-idx="${i}">
         <td class="rank">${i + 1}</td>
         <td>${r.apt_name} <span style="color:var(--muted);font-weight:400">(${r.dong})</span></td>
         <td class="count">${r.trade_count}건</td>
@@ -850,6 +858,7 @@ function renderLiquidityRanking(data) {
   resultEl.innerHTML = `
     <p class="hint" style="margin:8px 0 0">
       ${data.sigungu.sido} ${data.sigungu.sigungu} · 최근 ${data.period_months}개월 기준, 조건에 맞는 단지 ${data.total_matched_complexes}곳 중 상위 ${data.ranking.length}곳
+      · 단지를 클릭하면 상세 정보로 이동합니다
     </p>
     <div class="liquidity-table-wrap">
       <table class="liquidity-table">
@@ -858,6 +867,19 @@ function renderLiquidityRanking(data) {
       </table>
     </div>
   `;
+
+  $$(".clickable-row", resultEl).forEach((tr) => {
+    tr.addEventListener("click", async () => {
+      const r = data.ranking[Number(tr.dataset.idx)];
+      // 상단 "단지명으로 검색" 입력창에도 그대로 채워, 직접 검색한 것과 같은 결과 화면으로 연결한다.
+      $("#sigungu").value = data.sigungu.sigungu;
+      $("#apt-name").value = r.apt_name;
+      landingHeroEl.hidden = true;
+      candidateSection.hidden = true;
+      await runSearch(data.sigungu.sigungu, r.apt_name, null);
+      $("#result").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
 }
 
 $("#liquidity-search-btn").addEventListener("click", async () => {
@@ -903,6 +925,7 @@ const BUDGET_METRIC_TABS = [
 ];
 
 let budgetCandidates = [];
+let budgetSigungu = "";
 
 function candidateCardHtml(c, i) {
   const subway = c.subway_info
@@ -915,7 +938,7 @@ function candidateCardHtml(c, i) {
   const momentumSign = c.momentum_pct > 0 ? "+" : "";
 
   return `
-    <div class="candidate-card">
+    <div class="candidate-card clickable-row" data-idx="${i}">
       <div class="cc-head">
         <span class="cc-rank">${i + 1}</span>
         <span class="cc-name">${c.apt_name}</span>
@@ -948,6 +971,18 @@ function renderBudgetCandidates(sortKey) {
     sorted.sort((a, b) => (a[sortKey] - b[sortKey]) * tab.dir);
   }
   listEl.innerHTML = sorted.map((c, i) => candidateCardHtml(c, i)).join("");
+
+  $$(".clickable-row", listEl).forEach((card, idx) => {
+    card.addEventListener("click", async () => {
+      const c = sorted[idx];
+      $("#sigungu").value = budgetSigungu;
+      $("#apt-name").value = c.apt_name;
+      landingHeroEl.hidden = true;
+      candidateSection.hidden = true;
+      await runSearch(budgetSigungu, c.apt_name, null);
+      $("#result").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
 }
 
 async function runBudgetScreening() {
@@ -983,6 +1018,7 @@ async function runBudgetScreening() {
       return;
     }
     budgetCandidates = data.candidates;
+    budgetSigungu = data.sigungu.sigungu;
     if (!budgetCandidates.length) {
       resultEl.innerHTML = `
         <div class="budget-summary">
@@ -1004,7 +1040,7 @@ async function runBudgetScreening() {
         추정 대출 한도(DSR 40% 기준) <b>${fmtWon(Math.round(loanCapacity))}</b> · 보유 현금 ${fmtWon(cash)}
         → 총 예산 <b>${fmtWon(Math.round(budget))}</b>
       </div>
-      <p class="hint" style="margin:8px 0 0">${data.sigungu.sido} ${data.sigungu.sigungu} · 예산 내 최근 1년 거래 있는 단지 ${data.total_matched_complexes}곳 중 거래량 상위 ${budgetCandidates.length}곳</p>
+      <p class="hint" style="margin:8px 0 0">${data.sigungu.sido} ${data.sigungu.sigungu} · 예산 내 최근 1년 거래 있는 단지 ${data.total_matched_complexes}곳 중 거래량 상위 ${budgetCandidates.length}곳 · 단지를 클릭하면 상세 정보로 이동합니다</p>
       ${tabsHtml}
       <div id="budget-candidate-list" class="candidate-card-list"></div>
     `;

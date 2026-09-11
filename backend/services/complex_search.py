@@ -241,7 +241,7 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
     return {
         "complex_key": complex_key,
         "sigungu": {"sido": sigungu["sido"], "sigungu": sigungu["sigungu"], "code": sigungu_cd},
-        "matched_apt_name": apt_name,
+        "matched_apt_name": matched["name"] if matched else apt_name,
         "official_info": matched,
         "basis_info": basis_info,
         "basis_info_error": basis_info_error,

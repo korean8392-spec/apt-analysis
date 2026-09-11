@@ -14,6 +14,18 @@ logger = logging.getLogger("appt")
 
 app = FastAPI(title="네이버 아파트 분석")
 
+
+def _network_error(e: Exception, context: str) -> HTTPException:
+    # 정부/카카오 API 쪽 일시적 네트워크 오류(ConnectTimeout 등)가 여기로 흘러든다 —
+    # 재시도하면 대부분 바로 해결되는 것을 실제로 확인했다. 사용자에게는 원인을
+    # 자세히 노출하지 않고, 서버 로그에만 원인 파악용 스택트레이스를 남긴다.
+    url = getattr(getattr(e, "request", None), "url", None)
+    logger.exception("%s failed unexpectedly: url=%s", context, url)
+    return HTTPException(
+        status_code=503,
+        detail="일시적인 네트워크 오류로 조회에 실패했습니다. 잠시 후 다시 시도해주세요.",
+    )
+
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 
@@ -46,11 +58,7 @@ async def search(sigungu: str, apt_name: str, kapt_code: str | None = None):
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.exception(
-            "search failed unexpectedly: sigungu=%s apt_name=%s kapt_code=%s", sigungu, apt_name, kapt_code
-        )
-        url = getattr(getattr(e, "request", None), "url", None)
-        raise HTTPException(status_code=500, detail=f"예상치 못한 오류: {type(e).__name__}: {e} (url={url})")
+        raise _network_error(e, "search")
     manual_info = db.get_manual_complex_info(result["complex_key"])
     manual_listings = db.get_manual_listings(result["complex_key"])
     result["manual_complex_info"] = manual_info
@@ -80,6 +88,8 @@ async def liquidity_ranking(
         raise HTTPException(status_code=404, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise _network_error(e, "liquidity_ranking")
 
 
 @app.get("/api/budget-screening")
@@ -95,6 +105,8 @@ async def budget_screening(sigungu: str, max_price: float):
         raise HTTPException(status_code=404, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise _network_error(e, "budget_screening")
 
 
 class ManualListingIn(BaseModel):

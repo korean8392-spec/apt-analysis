@@ -360,6 +360,13 @@ function renderResult(data) {
     warn.textContent = msg;
     grid.appendChild(warn);
   }
+  if (data.basis_info_combined_registry_name) {
+    const note = document.createElement("div");
+    note.className = "banner warning";
+    note.style.gridColumn = "1 / -1";
+    note.textContent = `세대수/사용승인일 등은 국토부에 개별 등록되지 않아, 인접 통합 등록 단지 "${data.basis_info_combined_registry_name}" 기준 참고값입니다(실제 단지 규모와 다를 수 있음).`;
+    grid.appendChild(note);
+  }
   for (const [label, value] of items) {
     const div = document.createElement("div");
     div.className = "info-item";

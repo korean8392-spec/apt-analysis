@@ -251,6 +251,29 @@ def find_best_match(apt_list: list[dict], query_name: str) -> dict | None:
     return candidates[0] if candidates else None
 
 
+def find_registry_parent(apt_list: list[dict], query_name: str) -> dict | None:
+    """find_best_match가 실패했을 때만 쓰는 최후 수단 — 실거래가가 "주공2"처럼
+    지역명 없이 사업주체명+번호만 쓰는데, 단지목록엔 그 번호가 개별 등록되어 있지
+    않고 "구로주공"처럼 번호 없는 통합 명의 하나로만 등록된 실제 사례가 있다(1980년대
+    대한주택공사 단지에 흔함 — 여러 개의 물리적 단지가 관리상 하나의 공동주택단지코드를
+    공유). 세대수/사용승인일/건폐율·용적률 등 기본정보를 아예 못 보여주는 것보다, 이
+    통합 등록 단지 정보를 "참고용"으로라도 보여주는 게 낫다고 판단했다.
+
+    검색어가 정확히 "주공"+번호 형태일 때만 시도하고(전국 어디서나 나타나는 흔한 패턴이라
+    번호 없이 "주공"만 쓰는 임의 동네와 오매칭될 위험이 낮음), 같은 시군구 안에 번호 없는
+    "...주공..." 후보가 정확히 하나뿐일 때만 반환한다 — 여러 개면 어느 쪽인지 알 수 없으므로
+    아예 반환하지 않는다(오매칭보다 정보 없음이 낫다)."""
+    q_core, q_num = _extract_signature(normalize_name(query_name))
+    if q_core != "주공" or not q_num:
+        return None
+    candidates = []
+    for a in apt_list:
+        c_core, c_num = _extract_signature(normalize_name(a["name"]))
+        if c_num is None and "주공" in c_core:
+            candidates.append(a)
+    return candidates[0] if len(candidates) == 1 else None
+
+
 def find_by_kapt_code(apt_list: list[dict], kapt_code: str) -> dict | None:
     for a in apt_list:
         if a.get("kapt_code") == kapt_code:

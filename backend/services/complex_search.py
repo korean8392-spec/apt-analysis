@@ -58,11 +58,23 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
         else molit_apt_list.find_best_match(apt_list, apt_name)
     )
 
+    # 단지목록에서 정확히 매칭되는 단지가 없으면(matched=None), "주공2"처럼 지역명 없이
+    # 사업주체명+번호만 쓰는 실거래가 표기가 통합 등록 단지("구로주공")에 해당하는지
+    # 최후로 한 번 더 시도한다 — 실거래가/제목 매칭(target_norm)에는 영향을 주지 않고
+    # 기본정보/건축물대장 조회에만 쓴다(잘못 쓰면 세대수 등이 실제 단지가 아니라 통합
+    # 단지 전체 수치로 나와 오해를 줄 수 있으므로, 프런트에 "통합 등록 단지 참고용"임을
+    # 반드시 표시해야 한다).
+    registry_parent = None
+    if not matched:
+        registry_parent = molit_apt_list.find_registry_parent(apt_list, apt_name)
+    info_source = matched or registry_parent
+    is_combined_registry = registry_parent is not None and matched is None
+
     basis_info = None
     basis_info_error = None
-    if matched and matched.get("kapt_code"):
+    if info_source and info_source.get("kapt_code"):
         try:
-            basis_info = await molit_apt_basis.get_apt_basis(matched["kapt_code"])
+            basis_info = await molit_apt_basis.get_apt_basis(info_source["kapt_code"])
         except molit_apt_basis.ApiNotRegisteredError as e:
             basis_info_error = str(e)
 
@@ -245,6 +257,7 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
         "official_info": matched,
         "basis_info": basis_info,
         "basis_info_error": basis_info_error,
+        "basis_info_combined_registry_name": registry_parent["name"] if is_combined_registry else None,
         "building_info": building_info,
         "building_info_error": building_info_error,
         "subway_info": subway_info,

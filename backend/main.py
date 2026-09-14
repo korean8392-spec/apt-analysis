@@ -39,6 +39,28 @@ def health():
     return {"ok": True, "molit_key_configured": has_molit_key()}
 
 
+@app.get("/api/_debug/naver-probe")
+async def _debug_naver_probe():
+    """네이버 부동산 비공식 API를 Render 서버 IP에서 실제로 호출할 수 있는지 1회성으로
+    확인하기 위한 임시 진단 라우트. 결과 확인 후 삭제할 것."""
+    import httpx
+    from urllib.parse import quote
+
+    headers = {
+        "accept": "*/*",
+        "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+        "referer": f"https://new.land.naver.com/search?sk={quote('신정아이파크')}",
+    }
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(
+            "https://new.land.naver.com/api/search",
+            params={"keyword": "신정아이파크", "page": 1},
+            headers=headers,
+        )
+    return {"status_code": r.status_code, "body": r.text[:500]}
+
+
 @app.get("/api/find-complex")
 async def find_complex(sigungu: str, apt_name: str):
     try:

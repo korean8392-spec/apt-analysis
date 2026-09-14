@@ -52,13 +52,16 @@ async def _debug_naver_probe():
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
         "referer": f"https://new.land.naver.com/search?sk={quote('신정아이파크')}",
     }
-    async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.get(
-            "https://new.land.naver.com/api/search",
-            params={"keyword": "신정아이파크", "page": 1},
-            headers=headers,
-        )
-    return {"status_code": r.status_code, "body": r.text[:500]}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                "https://new.land.naver.com/api/search",
+                params={"keyword": "신정아이파크", "page": 1},
+                headers=headers,
+            )
+        return {"status_code": r.status_code, "body": r.text[:500]}
+    except Exception as e:
+        return {"error_type": type(e).__name__, "error_msg": str(e)}
 
 
 @app.get("/api/find-complex")

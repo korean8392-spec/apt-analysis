@@ -8,14 +8,14 @@
 <link rel="manifest" href="/manifest.json" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-<link rel="stylesheet" href="/style.css?v=22" />
+<link rel="stylesheet" href="/style.css?v=23" />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&display=swap" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="//dapi.kakao.com/v2/maps/sdk.js?appkey=6c37b3e9f236a9e3377c48e241ac3e8e&autoload=false"></script>
 </head>
 <body>
 <header>
-  <div class="brand">
+  <a class="brand brand-link" id="brand-home" href="/" aria-label="아빠트 첫 화면으로 (새로고침)">
     <span class="brand-mark">
       <svg viewBox="0 0 100 100" aria-hidden="true">
         <rect x="4" y="4" width="92" height="92" rx="22" fill="#2F5FD6"/>
@@ -29,7 +29,7 @@
       <h1>아빠트 <span class="brand-en">APPT</span></h1>
       <p class="sub">아빠처럼 꼼꼼하게 확인하는 아파트 가격 체크 · 국토교통부 실거래가 기반</p>
     </div>
-  </div>
+  </a>
 </header>
 
 <main>
@@ -406,6 +406,13 @@
       show(location.hash === "#about" ? "about" : "analyze");
     });
     show(location.hash === "#about" ? "about" : "analyze");
+
+    // 로고를 누르면 첫 화면으로 돌아가며 페이지를 새로고침한다(검색 결과/입력값 초기화).
+    document.getElementById("brand-home").addEventListener("click", function (e) {
+      e.preventDefault();
+      if (location.pathname === "/" && !location.hash && !location.search) location.reload();
+      else location.assign("/");
+    });
   })();
 </script>
 </body>

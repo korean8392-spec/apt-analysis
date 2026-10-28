@@ -1067,6 +1067,14 @@ function renderChart(canvas, v) {
     },
   };
 
+  // 거래가 너무 적으면 차트가 한두 개의 점뿐이라 오해하기 쉬우니 차트 위에 먼저 알려준다.
+  if (salePoints.length < 3 && !canvas.previousElementSibling?.classList.contains("chart-sample-note")) {
+    canvas.insertAdjacentHTML(
+      "beforebegin",
+      `<p class="chart-sample-note">⚠️ 최근 3년 매매 거래가 ${salePoints.length}건뿐이라 차트가 단순해요. 추정 적정가는 참고용으로만 봐 주세요.</p>`
+    );
+  }
+
   if (!canvas.nextElementSibling?.classList.contains("chart-note")) {
     canvas.insertAdjacentHTML(
       "afterend",
@@ -1105,7 +1113,7 @@ function renderChart(canvas, v) {
             // 마지막 눈금(오늘 날짜)과 바로 앞 눈금이 너무 붙어 글자가 겹치면 앞 눈금을 숨긴다.
             callback: (value) => {
               // 양 끝 눈금(여백 포함)과 너무 붙은 눈금은 글자가 겹치니 숨긴다.
-              const edge = (maxX - minX) * 0.08;
+              const edge = (maxX - minX) * 0.14;
               if (value !== maxX && maxX - value < edge) return "";
               if (value !== minX && value - minX < edge) return "";
               return fmtDate(value);

@@ -294,10 +294,19 @@ function renderCandidates(sigungu, aptName, candidates) {
   for (const c of candidates) {
     const item = document.createElement("div");
     item.className = "candidate-item";
+    const facts = [
+      c.household_cnt ? `${Number(c.household_cnt).toLocaleString()}세대` : null,
+      c.use_approval_year ? `${c.use_approval_year}년 준공` : null,
+    ].filter(Boolean);
+    const combined = (c.combined_phases || []).length
+      ? `<div class="combined-note">⚠️ ${c.combined_phases.join("·")}차가 한 건으로 묶여 등록된 단지예요. 세대수 등 단지 정보는 이 차수들의 합산 값일 수 있습니다.</div>`
+      : "";
     item.innerHTML = `
       <div class="info">
         <div class="name">${c.name}</div>
-        <div class="address">${c.address || "-"}</div>
+        <div class="address">${c.jibun_address || c.address || "-"}</div>
+        ${facts.length ? `<div class="facts">${facts.join(" · ")}</div>` : ""}
+        ${combined}
       </div>
       <button type="button">이 단지 맞음</button>
     `;

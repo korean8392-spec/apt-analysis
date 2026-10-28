@@ -1,3 +1,4 @@
+import asyncio
 import re
 from collections import Counter
 
@@ -22,6 +23,42 @@ def _extract_jibun_token(addr: str) -> str | None:
     return None
 
 
+def _combined_phases(name: str) -> list[int]:
+    """'압구정 현대(10,13,14차)'처럼 한 건에 여러 차수가 묶여 등록된 이름에서 차수 목록을 뽑는다.
+    묶음이 아니면(예: '압구정현대8차') 빈 리스트."""
+    m = re.search(r"(\d+(?:\s*[,·/&]\s*\d+)+)\s*차", name)
+    if m:
+        return [int(n) for n in re.findall(r"\d+", m.group(1))]
+    m = re.search(r"(\d+)\s*[~∼-]\s*(\d+)\s*차", name)
+    if m:
+        start, end = int(m.group(1)), int(m.group(2))
+        if 0 < end - start <= 20:
+            return list(range(start, end + 1))
+    return []
+
+
+async def _enrich_candidate(c: dict) -> dict:
+    """후보 확인용으로 지번주소/세대수/준공연도를 붙인다. 단지목록 API는 식별정보만 주기
+    때문에 기본정보 API(kaptCode 단건, 90일 캐시)를 쓰며, 실패해도 후보 자체는 그대로 보여준다."""
+    out = dict(c)  # 단지목록 캐시 원본을 건드리지 않도록 복사
+    out["combined_phases"] = _combined_phases(c["name"])
+    out["jibun_address"] = None
+    out["household_cnt"] = None
+    out["use_approval_year"] = None
+    if not c.get("kapt_code"):
+        return out
+    try:
+        basis = await molit_apt_basis.get_apt_basis(c["kapt_code"])
+    except Exception:
+        return out
+    if basis:
+        out["jibun_address"] = basis.get("address")
+        out["household_cnt"] = basis.get("household_cnt")
+        use_date = basis.get("use_approval_date") or ""
+        out["use_approval_year"] = use_date[:4] if len(use_date) >= 4 else None
+    return out
+
+
 _resolve_sigungu = dong_codes.resolve_sigungu
 
 
@@ -35,6 +72,7 @@ async def find_complex_candidates(sigungu_keyword: str, apt_name: str) -> dict:
     sigungu = _resolve_sigungu(sigungu_keyword)
     apt_list = await molit_apt_list.get_apt_list(sigungu["code"])
     candidates = molit_apt_list.find_candidates(apt_list, apt_name, limit=5)
+    candidates = list(await asyncio.gather(*(_enrich_candidate(c) for c in candidates)))
     return {
         "sigungu": {"sido": sigungu["sido"], "sigungu": sigungu["sigungu"], "code": sigungu["code"]},
         "candidates": candidates,

@@ -44,6 +44,46 @@ function fmtWon(v10k) {
   return `${man.toLocaleString()}만원`;
 }
 
+// 만원 단위로 입력하는 칸 아래에 "= 10억원"처럼 읽기 쉬운 금액을 보여준다(0 개수 헷갈림 방지).
+function moneyKo(v10k) {
+  const v = Math.round(v10k);
+  const jo = Math.floor(v / 100000000);
+  const eok = Math.floor((v % 100000000) / 10000);
+  const man = v % 10000;
+  const parts = [];
+  if (jo) parts.push(`${jo.toLocaleString()}조`);
+  if (eok) parts.push(`${eok.toLocaleString()}억`);
+  if (man) parts.push(`${man.toLocaleString()}만`);
+  return `${parts.join(" ") || "0"}원`;
+}
+
+function syncWonHints(root = document) {
+  root.querySelectorAll("input[data-won]").forEach((input) => {
+    let hint = input.nextElementSibling;
+    if (!hint || !hint.classList.contains("won-hint")) {
+      hint = document.createElement("div");
+      hint.className = "won-hint";
+      input.insertAdjacentElement("afterend", hint);
+    }
+    const value = Number(input.value);
+    const text = input.value !== "" && Number.isFinite(value) && value > 0 ? `= ${moneyKo(value)}` : "";
+    // 값이 같을 때는 건드리지 않는다: textContent를 다시 쓰면 아래 MutationObserver가 다시 깨어나 무한 반복된다.
+    if (hint.textContent !== text) hint.textContent = text;
+  });
+}
+document.addEventListener("input", (e) => {
+  if (e.target.matches && e.target.matches("input[data-won]")) syncWonHints(e.target.parentElement);
+});
+// 카드가 나중에 만들어지거나 값이 코드로 채워지는 칸도 맞춰준다.
+new MutationObserver((records) => {
+  // 금액 풀이(.won-hint) 자체의 변경에는 반응하지 않는다(자기 자신이 일으킨 변경 무한 반복 방지).
+  const relevant = records.some((r) =>
+    [...r.addedNodes].some((n) => n.nodeType === 1 && !n.classList.contains("won-hint"))
+  );
+  if (relevant) syncWonHints();
+}).observe(document.body, { childList: true, subtree: true });
+syncWonHints();
+
 // 서울/경기 공통 법정 상한요율 (2021년 개정 기준, 주택 매매)
 function brokerFee(price10k) {
   const price = price10k * 10000;
@@ -188,6 +228,7 @@ function renderQuickCheck(data) {
     const existing = (data.manual_listings || []).find((m) => m.pyeong_label === label);
     minInput.value = existing?.ask_price_min ?? "";
     maxInput.value = existing?.ask_price_max ?? "";
+    syncWonHints();
     computeVerdict();
   }
 
@@ -813,6 +854,7 @@ function renderPyeongList(data) {
       listingForm.listing_count.value = existing.listing_count ?? "";
       listingForm.ask_price_min.value = existing.ask_price_min ?? "";
       listingForm.ask_price_max.value = existing.ask_price_max ?? "";
+      syncWonHints(listingForm);
       currentDiv.textContent = `마지막 입력: 매물 ${existing.listing_count ?? "-"}건, 호가 ${fmtWon(existing.ask_price_min)} ~ ${fmtWon(existing.ask_price_max)}`;
     }
 
@@ -851,6 +893,7 @@ function renderPyeongList(data) {
             : body.ask_price_min || body.ask_price_max
         );
         refreshCostCalc();
+        syncWonHints(calcPriceInput.parentElement);
       }
     };
 

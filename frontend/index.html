@@ -8,7 +8,7 @@
 <link rel="manifest" href="/manifest.json" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-<link rel="stylesheet" href="/style.css?v=28" />
+<link rel="stylesheet" href="/style.css?v=29" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&display=swap" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -82,10 +82,10 @@
         <input id="liquidity-sigungu" type="text" placeholder="예: 강남구" />
       </label>
       <label>가격 최소(만원)
-        <input id="liquidity-price-min" type="number" placeholder="예: 50000" />
+        <input id="liquidity-price-min" type="number" data-won placeholder="예: 50000 (5억)" />
       </label>
       <label>가격 최대(만원)
-        <input id="liquidity-price-max" type="number" placeholder="예: 70000" />
+        <input id="liquidity-price-max" type="number" data-won placeholder="예: 70000 (7억)" />
       </label>
       <button id="liquidity-search-btn" type="button">순위 보기</button>
     </div>
@@ -101,10 +101,10 @@
         <input id="budget-sigungu" type="text" placeholder="예: 강남구" />
       </label>
       <label>보유 현금(만원)
-        <input id="budget-cash" type="number" placeholder="예: 30000" />
+        <input id="budget-cash" type="number" data-won placeholder="예: 30000 (3억)" />
       </label>
       <label>연소득(만원)
-        <input id="budget-income" type="number" placeholder="예: 8000" />
+        <input id="budget-income" type="number" data-won placeholder="예: 8000 (8,000만원)" />
       </label>
       <label>대출금리(%)
         <input id="budget-rate" type="number" value="4.5" step="0.1" />
@@ -163,10 +163,10 @@
           <select id="quick-check-pyeong"></select>
         </label>
         <label>호가 최저(만원)
-          <input type="number" id="quick-check-min" placeholder="예: 170000" />
+          <input type="number" id="quick-check-min" data-won placeholder="예: 170000 (17억)" />
         </label>
         <label>호가 최고(만원)
-          <input type="number" id="quick-check-max" placeholder="예: 175000" />
+          <input type="number" id="quick-check-max" data-won placeholder="예: 175000 (17.5억)" />
         </label>
       </div>
       <div id="quick-check-result" class="quick-check-result"></div>
@@ -382,8 +382,8 @@
       <p class="hint">네이버 부동산에서 확인한 값을 입력해 추정가와 비교해보세요.</p>
       <form class="manual-listing-form">
         <label>매물 개수 <input type="number" name="listing_count" /></label>
-        <label>호가 최저(만원) <input type="number" name="ask_price_min" /></label>
-        <label>호가 최고(만원) <input type="number" name="ask_price_max" /></label>
+        <label>호가 최저(만원) <input type="number" name="ask_price_min" data-won /></label>
+        <label>호가 최고(만원) <input type="number" name="ask_price_max" data-won /></label>
         <button type="submit">저장</button>
       </form>
       <div class="manual-listing-current"></div>
@@ -394,7 +394,7 @@
       <p class="hint">서울/경기 공통 법정 상한요율 기준 참고용 계산이며, 실제 협의·감면 여부에 따라 달라질 수 있습니다.</p>
       <div class="cost-calc-input">
         <label>계산 기준 거래금액(만원)
-          <input type="number" class="cost-calc-price" />
+          <input type="number" class="cost-calc-price" data-won />
         </label>
       </div>
       <div class="cost-calc-result"></div>
@@ -402,7 +402,7 @@
   </article>
 </template>
 
-<script src="/app.js?v=26"></script>
+<script src="/app.js?v=27"></script>
 <script>
   // 화면 전환: 기본은 분석 화면이고, #about 해시나 헤더의 "서비스 소개" 링크로 소개 화면을 연다.
   (function () {

@@ -965,8 +965,22 @@ function renderChart(canvas, v) {
   const recentLine = recentFrom < 0 ? [] : saleLine.slice(Math.max(recentFrom - 1, 0));
   const jeonseLine = monthlyMedianLine(jeonsePoints);
 
-  const minX = 0;
-  const maxX = dayOffset(allDates[allDates.length - 1]);
+  const dataMaxX = dayOffset(allDates[allDates.length - 1]);
+  // 점이 축의 맨 끝 선에 걸려 반쯤 잘리거나 가려지지 않도록 가로/세로에 여백을 둔다.
+  const xPad = Math.max(Math.round(dataMaxX * 0.04), 7);
+  const minX = -xPad;
+  const maxX = dataMaxX + xPad;
+  const yValues = [...salePoints, ...jeonsePoints].map((p) => p.y);
+  if (v.fair_price_10k) yValues.push(v.fair_price_10k / 10000);
+  if (v.peak_price_10k) yValues.push(v.peak_price_10k / 10000);
+  const yLow = Math.min(...yValues);
+  const yHigh = Math.max(...yValues);
+  const yPad = (yHigh - yLow) * 0.12 || yHigh * 0.05 || 0.1;
+  const yMin = Math.max(0, yLow - yPad);
+  const yMax = yHigh + yPad;
+  // 거래가 몇 건 안 될 때는 점을 키워서 눈에 띄게 한다.
+  const sparse = salePoints.length + jeonsePoints.length <= 6;
+  const dotR = (normal) => (sparse ? normal + 3 : normal);
 
   const lineStyle = (label, data, color) => ({
     label,
@@ -984,9 +998,9 @@ function renderChart(canvas, v) {
   });
 
   const datasets = [
-    { label: "매매 1~3년 전", data: olderSale, backgroundColor: "#93c5fd", pointRadius: 3, showLine: false, order: 0 },
-    { label: "매매 최근 1년", data: recentSale, backgroundColor: "#2563eb", pointRadius: 3.5, showLine: false, order: 0 },
-    { label: "전세 최근 1년", data: jeonsePoints, backgroundColor: "#16a34a", pointRadius: 3, showLine: false, order: 0 },
+    { label: "매매 1~3년 전", data: olderSale, backgroundColor: "#93c5fd", pointRadius: dotR(3), clip: 10, showLine: false, order: 0 },
+    { label: "매매 최근 1년", data: recentSale, backgroundColor: "#2563eb", pointRadius: dotR(3.5), clip: 10, showLine: false, order: 0 },
+    { label: "전세 최근 1년", data: jeonsePoints, backgroundColor: "#16a34a", pointRadius: dotR(3), clip: 10, showLine: false, order: 0 },
   ];
   if (olderLine.length > 1) datasets.push(lineStyle("매매 추세(1~3년 전)", olderLine, "#93c5fd"));
   if (recentLine.length > 1) datasets.push(lineStyle("매매 추세(최근 1년)", recentLine, "#2563eb"));
@@ -1042,16 +1056,12 @@ function renderChart(canvas, v) {
       }
       ctx.save();
       ctx.font = "bold 11px sans-serif";
-      ctx.textAlign = "right";
+      ctx.textAlign = "left";
       ctx.textBaseline = "middle";
+      // 이름표는 차트 안쪽이 아니라 오른쪽 바깥 여백에 그려서 거래 점을 가리지 않게 한다.
       for (const it of items) {
-        const label = `${it.text} ${it.value.toFixed(1)}억`;
-        const w = ctx.measureText(label).width;
-        const x = chartArea.right - 4;
-        ctx.fillStyle = "rgba(255,255,255,0.85)";
-        ctx.fillRect(x - w - 3, it.y - 7, w + 6, 14);
         ctx.fillStyle = it.color;
-        ctx.fillText(label, x, it.y);
+        ctx.fillText(`${it.text} ${it.value.toFixed(1)}억`, chartArea.right + 6, it.y);
       }
       ctx.restore();
     },
@@ -1070,6 +1080,7 @@ function renderChart(canvas, v) {
     plugins: [lineLabelPlugin],
     options: {
       responsive: true,
+      layout: { padding: { right: 76 } },
       plugins: {
         legend: {
           display: true,
@@ -1092,11 +1103,17 @@ function renderChart(canvas, v) {
           max: maxX,
           ticks: {
             // 마지막 눈금(오늘 날짜)과 바로 앞 눈금이 너무 붙어 글자가 겹치면 앞 눈금을 숨긴다.
-            callback: (value) => (value !== maxX && maxX - value < maxX * 0.08 ? "" : fmtDate(value)),
+            callback: (value) => {
+              // 양 끝 눈금(여백 포함)과 너무 붙은 눈금은 글자가 겹치니 숨긴다.
+              const edge = (maxX - minX) * 0.08;
+              if (value !== maxX && maxX - value < edge) return "";
+              if (value !== minX && value - minX < edge) return "";
+              return fmtDate(value);
+            },
             maxTicksLimit: 6,
           },
         },
-        y: { title: { display: true, text: "억원" } },
+        y: { min: yMin, max: yMax, ticks: { includeBounds: false }, title: { display: true, text: "억원" } },
       },
     },
   });

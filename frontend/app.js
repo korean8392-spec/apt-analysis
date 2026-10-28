@@ -883,17 +883,30 @@ function renderChart(canvas, v) {
     const mid = sorted.length >> 1;
     return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
   };
+  const monthIndex = (month) => Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7));
   const monthlyMedianLine = (points) => {
     const byMonth = {};
     for (const p of points) (byMonth[p.date.slice(0, 7)] ||= []).push(p);
-    return Object.keys(byMonth)
+    const months = Object.keys(byMonth)
       .sort()
       .map((month) => ({
         month,
+        n: byMonth[month].length,
         x: median(byMonth[month].map((p) => p.x)),
         y: median(byMonth[month].map((p) => p.y)),
-        date: `${month} 월 중앙값`,
       }));
+    // 거래가 한두 건뿐인 달 때문에 선이 튀지 않도록, 앞뒤 한 달씩(3개월)을 거래 건수를 가중치로
+    // 평균내 부드럽게 만든다. 달력상 떨어져 있는 달(거래 없는 달 건너뜀)은 섞지 않는다.
+    return months.map((m) => {
+      const near = months.filter((o) => Math.abs(monthIndex(o.month) - monthIndex(m.month)) <= 1);
+      const weight = near.reduce((sum, o) => sum + o.n, 0);
+      return {
+        x: m.x,
+        y: near.reduce((sum, o) => sum + o.y * o.n, 0) / weight,
+        month: m.month,
+        date: `${m.month} 추세선(3개월 평균)`,
+      };
+    });
   };
   const saleLine = monthlyMedianLine(salePoints);
   const cutoffMonth = oneYearAgo.slice(0, 7);
@@ -912,9 +925,11 @@ function renderChart(canvas, v) {
     type: "line",
     borderColor: color,
     backgroundColor: color,
-    borderWidth: 2,
+    borderWidth: 2.5,
     pointRadius: 0,
     fill: false,
+    tension: 0.35,
+    cubicInterpolationMode: "monotone",
     order: 3,
     hideLegend: true,
   });
@@ -924,9 +939,9 @@ function renderChart(canvas, v) {
     { label: "매매 최근 1년", data: recentSale, backgroundColor: "#2563eb", pointRadius: 3.5, showLine: false, order: 0 },
     { label: "전세 최근 1년", data: jeonsePoints, backgroundColor: "#16a34a", pointRadius: 3, showLine: false, order: 0 },
   ];
-  if (olderLine.length > 1) datasets.push(lineStyle("매매 월 중앙값(1~3년 전)", olderLine, "#93c5fd"));
-  if (recentLine.length > 1) datasets.push(lineStyle("매매 월 중앙값(최근 1년)", recentLine, "#2563eb"));
-  if (jeonseLine.length > 1) datasets.push(lineStyle("전세 월 중앙값", jeonseLine, "#16a34a"));
+  if (olderLine.length > 1) datasets.push(lineStyle("매매 추세(1~3년 전)", olderLine, "#93c5fd"));
+  if (recentLine.length > 1) datasets.push(lineStyle("매매 추세(최근 1년)", recentLine, "#2563eb"));
+  if (jeonseLine.length > 1) datasets.push(lineStyle("전세 추세", jeonseLine, "#16a34a"));
 
   if (v.fair_price_10k) {
     datasets.push({
@@ -996,7 +1011,7 @@ function renderChart(canvas, v) {
   if (!canvas.nextElementSibling?.classList.contains("chart-note")) {
     canvas.insertAdjacentHTML(
       "afterend",
-      '<p class="hint chart-note">점 = 개별 거래, 선 = 월별 중앙값 · 진한 파랑: 최근 1년 매매, 연한 파랑: 1~3년 전 매매</p>'
+      '<p class="hint chart-note">점 = 개별 거래, 선 = 월별 중앙값을 3개월 평균으로 부드럽게 이은 추세 · 진한 파랑: 최근 1년 매매, 연한 파랑: 1~3년 전 매매, 초록: 전세</p>'
     );
   }
 

@@ -4,7 +4,13 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const statusEl = $("#status");
 const resultEl = $("#result");
 const keyWarningEl = $("#key-warning");
-const landingHeroEl = $("#landing-hero");
+// 첫 화면(히어로 + 기능 소개)은 검색을 시작하면 함께 숨긴다. 기존 코드는 .hidden만 지정하므로 setter로 묶었다.
+const landingEls = [$("#landing-hero"), $("#landing-features")];
+const landingHeroEl = {
+  set hidden(value) {
+    landingEls.forEach((el) => { if (el) el.hidden = value; });
+  },
+};
 
 let currentData = null;
 

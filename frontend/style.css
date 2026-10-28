@@ -598,13 +598,6 @@ main {
 .cost-calc-result .box .label { font-size: 11px; color: var(--muted); }
 .cost-calc-result .box .value { font-size: 14px; font-weight: 700; }
 
-.tab-bar { display: flex; gap: 6px; margin: 4px 0 18px; border-bottom: 1px solid var(--border); }
-.tab-bar button {
-  border: 0; background: none; cursor: pointer; font: inherit; font-size: 14.5px; font-weight: 600;
-  color: var(--muted); padding: 10px 14px; border-bottom: 3px solid transparent; margin-bottom: -1px;
-}
-.tab-bar button[aria-selected="true"] { color: var(--accent-dark); border-bottom-color: var(--accent); }
-.tab-bar button:hover { color: var(--accent-dark); }
   .about { padding: 8px 0 48px; }
   .about h2 { font-size: 26px; line-height: 1.35; margin: 0 0 12px; letter-spacing: -0.02em; }
   .about h3 { font-size: 18px; margin: 40px 0 14px; letter-spacing: -0.01em; }
@@ -663,7 +656,12 @@ main {
   font-size: 11.5px; line-height: 1.5; margin-top: 6px; padding: 5px 8px;
   background: var(--warn-soft); border-radius: 8px; color: var(--text);
 }
-.brand-link { text-decoration: none; color: inherit; cursor: pointer; }
+.brand-link { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; cursor: pointer; }
+.brand-about {
+  margin-left: auto; flex: none; font-size: 13px; font-weight: 600; color: var(--accent-dark);
+  text-decoration: none; padding: 6px 10px; border-radius: 8px;
+}
+.brand-about:hover { background: var(--accent-soft); }
 .candidate-item .actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; flex: none; }
 .candidate-item button.secondary, .parcel-head button.secondary {
   background: var(--card-bg); color: var(--accent-dark); border: 1px solid var(--accent); font-weight: 600;

@@ -8,14 +8,15 @@
 <link rel="manifest" href="/manifest.json" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-<link rel="stylesheet" href="/style.css?v=24" />
+<link rel="stylesheet" href="/style.css?v=26" />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&display=swap" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="//dapi.kakao.com/v2/maps/sdk.js?appkey=6c37b3e9f236a9e3377c48e241ac3e8e&autoload=false"></script>
 </head>
 <body>
 <header>
-  <a class="brand brand-link" id="brand-home" href="/" aria-label="아빠트 첫 화면으로 (새로고침)">
+  <div class="brand">
+  <a class="brand-link" id="brand-home" href="/" aria-label="아빠트 첫 화면으로 (새로고침)">
     <span class="brand-mark">
       <svg viewBox="0 0 100 100" aria-hidden="true">
         <rect x="4" y="4" width="92" height="92" rx="22" fill="#2F5FD6"/>
@@ -30,15 +31,12 @@
       <p class="sub">아빠처럼 꼼꼼하게 확인하는 아파트 가격 체크 · 국토교통부 실거래가 기반</p>
     </div>
   </a>
+  <a class="brand-about" href="#about" data-tab="about">서비스 소개</a>
+  </div>
 </header>
 
 <main>
-  <div class="tab-bar" role="tablist">
-    <button type="button" role="tab" id="tab-btn-about" data-tab="about" aria-selected="false">서비스 소개</button>
-    <button type="button" role="tab" id="tab-btn-analyze" data-tab="analyze" aria-selected="true">아파트 분석</button>
-  </div>
-
-  <div id="tab-analyze" role="tabpanel">
+  <div id="tab-analyze">
   <section id="key-warning" class="banner warning" hidden>
     ⚠️ 공공데이터포털 서비스키가 설정되지 않았습니다. <code>.env</code>의 <code>MOLIT_SERVICE_KEY</code>를
     채운 뒤 서버를 재시작하세요.
@@ -188,7 +186,7 @@
   </section>
   </div>
 
-  <div id="tab-about" class="about" role="tabpanel" hidden>
+  <div id="tab-about" class="about" hidden>
   <section>
     <h2>아빠, 이 집 이 가격에 사도 될까?</h2>
     <p class="lead">
@@ -385,14 +383,13 @@
 
 <script src="/app.js?v=26"></script>
 <script>
-  // 탭 전환: #about 해시로 소개 탭을 바로 열 수 있다.
+  // 화면 전환: 기본은 분석 화면이고, #about 해시나 헤더의 "서비스 소개" 링크로 소개 화면을 연다.
   (function () {
     var panels = { analyze: document.getElementById("tab-analyze"), about: document.getElementById("tab-about") };
     function show(name) {
       if (!panels[name]) name = "analyze";
       Object.keys(panels).forEach(function (k) {
         panels[k].hidden = k !== name;
-        document.getElementById("tab-btn-" + k).setAttribute("aria-selected", String(k === name));
       });
       var h = name === "about" ? "#about" : location.pathname + location.search;
       if (name === "about" ? location.hash !== "#about" : location.hash) history.replaceState(null, "", h);

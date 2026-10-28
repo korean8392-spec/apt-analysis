@@ -19,6 +19,7 @@
   --radius-lg: 20px;
   --radius-md: 14px;
   --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 6px 20px rgba(16, 24, 40, 0.06);
+  --font-display: "Jua", "Pretendard Variable", "Pretendard", sans-serif;
   --shadow-pop: 0 14px 36px rgba(47, 95, 214, 0.16);
   font-family: "Pretendard Variable", "Pretendard", -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
 }
@@ -54,7 +55,7 @@ header h1 {
   margin: 0;
   font-size: 21px;
   font-weight: 400;
-  font-family: "Black Han Sans", "Pretendard", sans-serif;
+  font-family: var(--font-display);
   letter-spacing: -0.01em;
   color: var(--text);
   display: flex;
@@ -165,7 +166,7 @@ main {
 }
 .hero-vocative {
   color: var(--accent);
-  font-family: "Black Han Sans", "Pretendard Variable", "Pretendard", sans-serif;
+  font-family: var(--font-display);
   font-weight: 400;
 }
 .hero-copy p {
@@ -796,4 +797,33 @@ header { background: rgba(255, 255, 255, 0.94); border-bottom: 1px solid var(--b
   font-size: 12.5px;
   line-height: 1.5;
   color: #8a5a00;
+}
+
+/* ===== 둥글고 귀여운 제목 글꼴(주아체): 큰 제목에만 쓰고 숫자/설명 같은 본문은 Pretendard 유지 ===== */
+header h1,
+.hero-copy h2,
+.section-title,
+.hero-feature-title,
+.complex-card h2,
+.pyeong-header h3,
+.about h2,
+.about h3,
+.about-card h4,
+.accordion summary.quick-check-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.hero-copy h2 { font-size: 44px; line-height: 1.22; word-break: keep-all; text-wrap: balance; }
+header h1 { font-size: 25px; }
+.section-title { font-size: 21px; }
+.hero-feature-title { font-size: 17px; }
+.complex-card h2 { font-size: 24px; }
+.pyeong-header h3 { font-size: 21px; }
+.about h2 { font-size: 30px; }
+.about h3 { font-size: 22px; }
+.about-card h4 { font-size: 16.5px; }
+.accordion summary.quick-check-title { font-size: 18px; }
+@media (max-width: 640px) {
+  .hero-copy h2 { font-size: 32px; }
 }

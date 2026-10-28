@@ -79,7 +79,12 @@ async def find_complex_candidates(sigungu_keyword: str, apt_name: str) -> dict:
     }
 
 
-async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | None = None) -> dict:
+async def search_complex(
+    sigungu_keyword: str,
+    apt_name: str,
+    kapt_code: str | None = None,
+    jibun: str | None = None,
+) -> dict:
     if not has_molit_key():
         raise RuntimeError(
             "공공데이터포털 서비스키(MOLIT_SERVICE_KEY)가 설정되지 않았습니다. "
@@ -116,6 +121,20 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
         except molit_apt_basis.ApiNotRegisteredError as e:
             basis_info_error = str(e)
 
+    # 지번(건축물대장) 모드: 하나의 지번 = 하나의 건축물대장(총괄표제부) = 별도 단지로 취급한다.
+    # 단지명 표기는 등록기관마다 달라(예: "현대10", "압구정현대10차") 이름 매칭으로는 차수를
+    # 정확히 나눌 수 없지만, 실거래가에는 지번이 있어 대장 단위로는 정확히 묶을 수 있다.
+    parcel_mode = bool(jibun and matched and matched.get("dong"))
+    parcel_recap = None
+    if parcel_mode:
+        try:
+            parcel_recap = await _parcel_recap(sigungu_cd, matched, jibun)
+        except molit_building.ApiNotRegisteredError:
+            parcel_recap = None
+        # K-apt 기본정보는 묶음 전체 기준이라, 이 지번 대장의 값으로 바꿔 보여준다.
+        basis_info = _parcel_basis_info(matched, jibun, parcel_recap)
+        basis_info_error = None
+
     trades_raw = await molit_trade.get_trades(sigungu_cd, months=36)
 
     # 실거래가의 아파트명 표기는 등록기관마다 달라(예: 검색어 "삼환로즈빌" vs 공식명
@@ -136,6 +155,16 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
                 target_norm, molit_apt_list.normalize_name(t["apt_name"])
             )
         ]
+
+    if parcel_mode:
+        matched_trades = [
+            t for t in trades_raw
+            if t.get("dong") == matched["dong"] and t.get("jibun") == jibun
+        ]
+        if not matched_trades:
+            raise ValueError(
+                f"{matched['dong']} {jibun}번지에서 최근 36개월 실거래가를 찾지 못했습니다."
+            )
 
     if not matched_trades and not matched:
         raise ValueError(
@@ -170,6 +199,11 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
         same_dong_rents = [r for r in matched_rents if r.get("dong") == matched["dong"]]
         if same_dong_rents:
             matched_rents = same_dong_rents
+    if parcel_mode:
+        matched_rents = [
+            r for r in rents_raw
+            if r.get("dong") == matched["dong"] and r.get("jibun") == jibun
+        ]
     jeonse_summary = valuation.build_jeonse_summary(matched_rents)
 
     for v in valuations:
@@ -287,11 +321,18 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
             building_info_error = f"건축물대장 조회 중 일시적인 오류가 발생했습니다: {e}"
 
     complex_key = make_complex_key(sigungu_cd, apt_name)
+    matched_apt_name = matched["name"] if matched else apt_name
+    parcel = None
+    if parcel_mode:
+        complex_key = make_complex_key(sigungu_cd, f"{matched['name']}#{jibun}")
+        parcel = _parcel_summary(matched, jibun, parcel_recap)
+        matched_apt_name = parcel["label"]
 
     return {
         "complex_key": complex_key,
         "sigungu": {"sido": sigungu["sido"], "sigungu": sigungu["sigungu"], "code": sigungu_cd},
-        "matched_apt_name": matched["name"] if matched else apt_name,
+        "matched_apt_name": matched_apt_name,
+        "parcel": parcel,
         "official_info": matched,
         "basis_info": basis_info,
         "basis_info_error": basis_info_error,
@@ -305,6 +346,146 @@ async def search_complex(sigungu_keyword: str, apt_name: str, kapt_code: str | N
         "trade_sample_total": len(matched_trades),
         "geocode": geocode_result,
         "geocode_query": geocode_query,
+    }
+
+
+def _split_jibun(jibun: str) -> tuple[str, str]:
+    bun, _, ji = jibun.partition("-")
+    return bun.zfill(4), (ji or "0").zfill(4)
+
+
+async def _parcel_recap(sigungu_cd: str, matched: dict, jibun: str) -> dict | None:
+    bjd = matched.get("bjd_code") or ""
+    if len(bjd) != 10:
+        return None
+    bun, ji = _split_jibun(jibun)
+    try:
+        return await molit_building.get_building_recap_info(bjd[:5], bjd[5:10], bun, ji)
+    except molit_building.ApiNotRegisteredError:
+        raise
+    except RuntimeError:
+        return None
+
+
+def _last_trade_date(trades: list[dict]) -> str | None:
+    dates = [
+        f"{t['deal_year']}-{int(t['deal_month']):02d}-{int(t['deal_day']):02d}"
+        for t in trades
+        if t.get("deal_year") and t.get("deal_month") and t.get("deal_day")
+    ]
+    return max(dates) if dates else None
+
+
+def _fmt_use_date(raw) -> str | None:
+    raw = str(raw or "").strip()
+    return f"{raw[:4]}-{raw[4:6]}-{raw[6:8]}" if len(raw) == 8 and raw.isdigit() else None
+
+
+def _parcel_basis_info(matched: dict, jibun: str, recap: dict | None) -> dict:
+    """지번(건축물대장) 단위로 나눠 볼 때 화면에 보일 기본정보. 대장(총괄표제부) 값만 쓴다."""
+    raw = (recap or {}).get("_raw") or {}
+    hh = (recap or {}).get("household_cnt")
+    return {
+        "kapt_code": matched.get("kapt_code"),
+        "name": raw.get("bldNm") or matched.get("name"),
+        "address": f"{matched.get('address', '')} {jibun}".strip(),
+        "road_address": None,
+        "dong_cnt": (recap or {}).get("main_bld_cnt"),
+        "household_cnt": int(hh) if str(hh or "").isdigit() else hh,
+        "use_approval_date": _fmt_use_date(raw.get("useAprDay")),
+        "total_floor_area": (recap or {}).get("total_area"),
+        "top_floor": None,
+        "heat_type": None,
+        "_raw": {"bjdCode": matched.get("bjd_code")},
+    }
+
+
+def _parcel_summary(matched: dict, jibun: str, recap: dict | None) -> dict:
+    base = re.sub(r"\(.*?\)", "", matched["name"]).strip()
+    bld_name = ((recap or {}).get("_raw") or {}).get("bldNm") or None
+    label = f"{base} · {jibun}번지" + (f" ({bld_name})" if bld_name and bld_name not in base else "")
+    return {"jibun": jibun, "building_name": bld_name, "label": label}
+
+
+def _family_trades(trades_raw: list[dict], matched: dict, target_norm: str) -> list[dict]:
+    """같은 법정동에서 이 단지(군)에 속하는 실거래가: 이름이 매칭되거나, "현대10차"처럼
+    법정동명을 뺀 핵심 이름("현대")으로 시작하는 거래. "신현대"처럼 앞에 글자가 붙은
+    다른 단지는 제외한다."""
+    dong = matched.get("dong") or ""
+    stem = dong.removesuffix("동")
+    core = target_norm[len(stem):] if stem and target_norm.startswith(stem) else target_norm
+    pattern = re.compile(rf"^({re.escape(stem)})?{re.escape(core)}") if core else None
+    out = []
+    for t in trades_raw:
+        if dong and t.get("dong") != dong:
+            continue
+        name = t.get("apt_name") or ""
+        if molit_apt_list.fuzzy_name_matches(target_norm, molit_apt_list.normalize_name(name)):
+            out.append(t)
+            continue
+        letters = re.sub(r"[^가-힣A-Za-z]", "", name).lower()
+        letters = re.sub(r"(아파트|apt)?차?$", "", letters)
+        if pattern and pattern.match(letters):
+            out.append(t)
+    return out
+
+
+async def list_registry_parcels(sigungu_keyword: str, kapt_code: str) -> dict:
+    """후보 단지를 건축물대장(지번) 단위로 나눠 목록을 만든다. 최근 36개월 안에 실거래가가
+    있는 지번만 나온다(거래가 없는 지번은 가격 분석 대상이 아니므로)."""
+    if not has_molit_key():
+        raise RuntimeError(
+            "공공데이터포털 서비스키(MOLIT_SERVICE_KEY)가 설정되지 않았습니다. "
+            ".env 파일에 키를 넣고 서버를 재시작하세요."
+        )
+    sigungu = _resolve_sigungu(sigungu_keyword)
+    apt_list = await molit_apt_list.get_apt_list(sigungu["code"])
+    matched = molit_apt_list.find_by_kapt_code(apt_list, kapt_code)
+    if not matched:
+        raise ValueError("단지목록에서 해당 단지를 찾지 못했습니다.")
+
+    trades_raw = await molit_trade.get_trades(sigungu["code"], months=36)
+    target_norm = molit_apt_list.normalize_name(matched["name"])
+    family = _family_trades(trades_raw, matched, target_norm)
+
+    by_jibun: dict[str, list[dict]] = {}
+    for t in family:
+        if t.get("jibun"):
+            by_jibun[t["jibun"]] = by_jibun.get(t["jibun"], []) + [t]
+
+    sem = asyncio.Semaphore(5)
+
+    async def one(jibun: str, trades: list[dict]) -> dict:
+        async with sem:
+            try:
+                recap = await _parcel_recap(sigungu["code"], matched, jibun)
+            except molit_building.ApiNotRegisteredError:
+                recap = None
+        raw = (recap or {}).get("_raw") or {}
+        hh = (recap or {}).get("household_cnt")
+        trades = [t for t in trades if not t.get("cancel_deal")]
+        names = Counter(t["apt_name"] for t in trades).most_common(3)
+        return {
+            "jibun": jibun,
+            "building_name": raw.get("bldNm") or None,
+            "household_cnt": int(hh) if str(hh or "").isdigit() else hh,
+            "use_approval_date": _fmt_use_date(raw.get("useAprDay")),
+            "trade_count": len(trades),
+            "last_trade_date": _last_trade_date(trades),
+            "trade_names": [n for n, _ in names],
+        }
+
+    parcels = await asyncio.gather(*(one(j, ts) for j, ts in by_jibun.items()))
+
+    def jibun_key(p: dict):
+        bun, _, ji = p["jibun"].partition("-")
+        return (int(bun) if bun.isdigit() else 10**9, int(ji) if ji.isdigit() else 0)
+
+    return {
+        "sigungu": {"sido": sigungu["sido"], "sigungu": sigungu["sigungu"], "code": sigungu["code"]},
+        "complex_name": matched["name"],
+        "dong": matched.get("dong"),
+        "parcels": sorted(parcels, key=jibun_key),
     }
 
 

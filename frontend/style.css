@@ -664,3 +664,10 @@ main {
   background: var(--warn-soft); border-radius: 8px; color: var(--text);
 }
 .brand-link { text-decoration: none; color: inherit; cursor: pointer; }
+.candidate-item .actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; flex: none; }
+.candidate-item button.secondary, .parcel-head button.secondary {
+  background: var(--card-bg); color: var(--accent-dark); border: 1px solid var(--accent); font-weight: 600;
+}
+.candidate-item button.secondary:hover, .parcel-head button.secondary:hover { background: var(--accent-soft); }
+.parcel-head { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; margin-bottom: 4px; }
+.parcel-head button.secondary { padding: 7px 12px; border-radius: 10px; cursor: pointer; font: inherit; font-size: 13px; }

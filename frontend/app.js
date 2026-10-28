@@ -299,7 +299,7 @@ function renderCandidates(sigungu, aptName, candidates) {
       c.use_approval_year ? `${c.use_approval_year}년 준공` : null,
     ].filter(Boolean);
     const combined = (c.combined_phases || []).length
-      ? `<div class="combined-note">⚠️ ${c.combined_phases.join("·")}차가 한 건으로 묶여 등록된 단지예요. 세대수 등 단지 정보는 이 차수들의 합산 값일 수 있습니다.</div>`
+      ? `<div class="combined-note">⚠️ ${c.combined_phases.join("·")}차가 한 건으로 묶여 등록된 단지예요. 세대수 등 단지 정보는 합산 값일 수 있으니 \u2018건축물대장별로 나눠 보기\u2019로 각각 확인하세요.</div>`
       : "";
     item.innerHTML = `
       <div class="info">
@@ -308,23 +308,90 @@ function renderCandidates(sigungu, aptName, candidates) {
         ${facts.length ? `<div class="facts">${facts.join(" · ")}</div>` : ""}
         ${combined}
       </div>
-      <button type="button">이 단지 맞음</button>
+      <div class="actions">
+        <button type="button" class="pick-btn">이 단지 맞음</button>
+        <button type="button" class="secondary split-btn">건축물대장별로 나눠 보기</button>
+      </div>
     `;
-    item.querySelector("button").addEventListener("click", () => {
+    item.querySelector(".pick-btn").addEventListener("click", () => {
       candidateSection.hidden = true;
       runSearch(sigungu, aptName, c.kapt_code);
+    });
+    item.querySelector(".split-btn").addEventListener("click", () => {
+      showParcels(sigungu, aptName, c, candidates);
     });
     candidateListEl.appendChild(item);
   }
 }
 
-async function runSearch(sigungu, aptName, kaptCode) {
+// 한 단지로 묶여 등록된 곳을 건축물대장(지번) 단위로 나눠 보여준다. 대장 하나가 별도 단지다.
+async function showParcels(sigungu, aptName, c, candidates) {
+  statusEl.textContent = "건축물대장을 확인하는 중... (처음에는 몇 초 걸릴 수 있어요)";
+  try {
+    const res = await fetch(
+      `/api/complex-parcels?sigungu=${encodeURIComponent(sigungu)}&kapt_code=${encodeURIComponent(c.kapt_code)}`
+    );
+    const data = await readJson(res);
+    if (!res.ok) {
+      statusEl.innerHTML = `<span style="color:#dc2626">${data.detail || "조회 실패"}</span>`;
+      return;
+    }
+    statusEl.textContent = "";
+    candidateSection.hidden = false;
+    candidateListEl.innerHTML = "";
+
+    const head = document.createElement("div");
+    head.className = "parcel-head";
+    head.innerHTML = `
+      <div><strong>${data.complex_name}</strong>을(를) 건축물대장 기준으로 나눴어요 (${data.parcels.length}개)</div>
+      <div class="hint">최근 36개월 안에 실거래가 있는 지번만 보여요. 거래가 없는 대장은 가격 분석 대상이 아니라 빠집니다.</div>
+      <button type="button" class="secondary back-btn">← 후보 목록으로</button>
+    `;
+    head.querySelector(".back-btn").addEventListener("click", () => renderCandidates(sigungu, aptName, candidates));
+    candidateListEl.appendChild(head);
+
+    if (!data.parcels.length) {
+      const empty = document.createElement("div");
+      empty.className = "hint";
+      empty.textContent = "최근 36개월 안에 거래가 확인되는 건축물대장을 찾지 못했습니다.";
+      candidateListEl.appendChild(empty);
+    }
+    for (const p of data.parcels) {
+      const facts = [
+        p.household_cnt ? `${Number(p.household_cnt).toLocaleString()}세대` : null,
+        p.use_approval_date ? `${p.use_approval_date.slice(0, 4)}년 준공` : null,
+        `최근 36개월 거래 ${p.trade_count}건`,
+        p.last_trade_date ? `마지막 거래 ${p.last_trade_date}` : null,
+      ].filter(Boolean);
+      const item = document.createElement("div");
+      item.className = "candidate-item";
+      item.innerHTML = `
+        <div class="info">
+          <div class="name">${p.building_name || `${data.dong} ${p.jibun}번지`}</div>
+          <div class="address">${data.dong} ${p.jibun}번지${p.trade_names.length ? ` · 실거래 표기: ${p.trade_names.join(", ")}` : ""}</div>
+          <div class="facts">${facts.join(" · ")}</div>
+        </div>
+        <div class="actions"><button type="button" class="pick-btn">이 대장 보기</button></div>
+      `;
+      item.querySelector(".pick-btn").addEventListener("click", () => {
+        candidateSection.hidden = true;
+        runSearch(sigungu, aptName, c.kapt_code, p.jibun);
+      });
+      candidateListEl.appendChild(item);
+    }
+  } catch (err) {
+    statusEl.innerHTML = `<span style="color:#dc2626">${errorMessage(err)}</span>`;
+  }
+}
+
+async function runSearch(sigungu, aptName, kaptCode, jibun) {
   statusEl.textContent = "조회 중... (국토부 API에서 최근 36개월 실거래가를 가져오는 중이라 몇 초 걸릴 수 있어요)";
   resultEl.hidden = true;
 
   try {
     let url = `/api/search?sigungu=${encodeURIComponent(sigungu)}&apt_name=${encodeURIComponent(aptName)}`;
     if (kaptCode) url += `&kapt_code=${encodeURIComponent(kaptCode)}`;
+    if (jibun) url += `&jibun=${encodeURIComponent(jibun)}`;
     const res = await fetch(url);
     const data = await readJson(res);
     if (!res.ok) {
@@ -390,6 +457,13 @@ function renderResult(data) {
     warn.style.gridColumn = "1 / -1";
     warn.textContent = msg;
     grid.appendChild(warn);
+  }
+  if (data.parcel) {
+    const note = document.createElement("div");
+    note.className = "banner warning";
+    note.style.gridColumn = "1 / -1";
+    note.textContent = `건축물대장 기준 ${data.parcel.jibun}번지 단위로 나눠 본 결과입니다. 이 지번의 실거래가와 대장(세대수·동수·사용승인일·건폐율·용적률)만 사용했어요.`;
+    grid.appendChild(note);
   }
   if (data.basis_info_combined_registry_name) {
     const note = document.createElement("div");

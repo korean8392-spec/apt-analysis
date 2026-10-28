@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -49,10 +49,27 @@ async def find_complex(sigungu: str, apt_name: str):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.get("/api/search")
-async def search(sigungu: str, apt_name: str, kapt_code: str | None = None):
+@app.get("/api/complex-parcels")
+async def complex_parcels(sigungu: str, kapt_code: str):
     try:
-        result = await complex_search.search_complex(sigungu, apt_name, kapt_code)
+        return await complex_search.list_registry_parcels(sigungu, kapt_code)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise _network_error(e, "complex_parcels")
+
+
+@app.get("/api/search")
+async def search(
+    sigungu: str,
+    apt_name: str,
+    kapt_code: str | None = None,
+    jibun: str | None = Query(None, pattern=r"^\d{1,4}(-\d{1,4})?$"),
+):
+    try:
+        result = await complex_search.search_complex(sigungu, apt_name, kapt_code, jibun)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except RuntimeError as e:

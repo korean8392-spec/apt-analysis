@@ -597,3 +597,15 @@ main {
 }
 .cost-calc-result .box .label { font-size: 11px; color: var(--muted); }
 .cost-calc-result .box .value { font-size: 14px; font-weight: 700; }
+
+.brand-about {
+  margin-left: auto;
+  flex: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-dark);
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+.brand-about:hover { background: var(--accent-soft); }

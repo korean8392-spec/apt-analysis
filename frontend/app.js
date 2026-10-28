@@ -8,6 +8,28 @@ const landingHeroEl = $("#landing-hero");
 
 let currentData = null;
 
+// 서버가 JSON이 아닌 응답(배포 중/절전 해제 중인 Render의 HTML 오류 페이지 등)을 주면
+// "Unexpected token '<'" 같은 개발자용 메시지 대신 사용자가 할 일을 안내한다.
+class ServerNotReadyError extends Error {}
+
+async function readJson(res) {
+  try {
+    return await res.json();
+  } catch {
+    throw new ServerNotReadyError();
+  }
+}
+
+function errorMessage(err) {
+  if (err instanceof ServerNotReadyError) {
+    return "서버가 깨어나는 중이거나 업데이트 중이에요. 1~2분 뒤에 다시 검색해 주세요.";
+  }
+  if (err instanceof TypeError) {
+    return "서버에 연결하지 못했습니다. 인터넷 연결을 확인하고 잠시 후 다시 시도해 주세요.";
+  }
+  return `오류가 발생했습니다: ${err}`;
+}
+
 function fmtWon(v10k) {
   if (v10k === null || v10k === undefined || Number.isNaN(v10k)) return "-";
   const eok = Math.floor(v10k / 10000);
@@ -249,7 +271,7 @@ $("#search-form").addEventListener("submit", async (e) => {
   try {
     const url = `/api/find-complex?sigungu=${encodeURIComponent(sigungu)}&apt_name=${encodeURIComponent(aptName)}`;
     const res = await fetch(url);
-    const data = await res.json();
+    const data = await readJson(res);
     if (!res.ok) {
       statusEl.innerHTML = `<span style="color:#dc2626">${data.detail || "조회 실패"}</span>`;
       return;
@@ -262,7 +284,7 @@ $("#search-form").addEventListener("submit", async (e) => {
     }
     renderCandidates(sigungu, aptName, data.candidates);
   } catch (err) {
-    statusEl.innerHTML = `<span style="color:#dc2626">네트워크 오류: ${err}</span>`;
+    statusEl.innerHTML = `<span style="color:#dc2626">${errorMessage(err)}</span>`;
   }
 });
 
@@ -295,7 +317,7 @@ async function runSearch(sigungu, aptName, kaptCode) {
     let url = `/api/search?sigungu=${encodeURIComponent(sigungu)}&apt_name=${encodeURIComponent(aptName)}`;
     if (kaptCode) url += `&kapt_code=${encodeURIComponent(kaptCode)}`;
     const res = await fetch(url);
-    const data = await res.json();
+    const data = await readJson(res);
     if (!res.ok) {
       statusEl.innerHTML = `<span style="color:#dc2626">${data.detail || "조회 실패"}</span>`;
       return;
@@ -303,7 +325,7 @@ async function runSearch(sigungu, aptName, kaptCode) {
     statusEl.textContent = "";
     renderResult(data);
   } catch (err) {
-    statusEl.innerHTML = `<span style="color:#dc2626">네트워크 오류: ${err}</span>`;
+    statusEl.innerHTML = `<span style="color:#dc2626">${errorMessage(err)}</span>`;
   }
 }
 
@@ -905,14 +927,14 @@ $("#liquidity-search-btn").addEventListener("click", async () => {
     if (priceMin) params.set("price_min", priceMin);
     if (priceMax) params.set("price_max", priceMax);
     const res = await fetch(`/api/liquidity-ranking?${params}`);
-    const data = await res.json();
+    const data = await readJson(res);
     if (!res.ok) {
       resultEl.innerHTML = `<p class="hint" style="margin:8px 0 0;color:#dc2626">${data.detail || "조회 실패"}</p>`;
       return;
     }
     renderLiquidityRanking(data);
   } catch (err) {
-    resultEl.innerHTML = `<p class="hint" style="margin:8px 0 0;color:#dc2626">네트워크 오류: ${err}</p>`;
+    resultEl.innerHTML = `<p class="hint" style="margin:8px 0 0;color:#dc2626">${errorMessage(err)}</p>`;
   }
 });
 
@@ -1019,7 +1041,7 @@ async function runBudgetScreening() {
   try {
     const params = new URLSearchParams({ sigungu, max_price: Math.round(budget) });
     const res = await fetch(`/api/budget-screening?${params}`);
-    const data = await res.json();
+    const data = await readJson(res);
     if (!res.ok) {
       resultEl.innerHTML += `<p class="hint" style="margin:8px 0 0;color:#dc2626">${data.detail || "조회 실패"}</p>`;
       return;
@@ -1060,7 +1082,7 @@ async function runBudgetScreening() {
     });
     renderBudgetCandidates("");
   } catch (err) {
-    resultEl.innerHTML += `<p class="hint" style="margin:8px 0 0;color:#dc2626">네트워크 오류: ${err}</p>`;
+    resultEl.innerHTML += `<p class="hint" style="margin:8px 0 0;color:#dc2626">${errorMessage(err)}</p>`;
   }
 }
 

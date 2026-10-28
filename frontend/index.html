@@ -8,7 +8,7 @@
 <link rel="manifest" href="/manifest.json" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-<link rel="stylesheet" href="/style.css?v=20" />
+<link rel="stylesheet" href="/style.css?v=21" />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&display=swap" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="//dapi.kakao.com/v2/maps/sdk.js?appkey=6c37b3e9f236a9e3377c48e241ac3e8e&autoload=false"></script>
@@ -29,11 +29,16 @@
       <h1>아빠트 <span class="brand-en">APPT</span></h1>
       <p class="sub">아빠처럼 꼼꼼하게 확인하는 아파트 가격 체크 · 국토교통부 실거래가 기반</p>
     </div>
-    <a class="brand-about" href="/about.html">서비스 소개</a>
   </div>
 </header>
 
 <main>
+  <div class="tab-bar" role="tablist">
+    <button type="button" role="tab" id="tab-btn-analyze" data-tab="analyze" aria-selected="true">아파트 분석</button>
+    <button type="button" role="tab" id="tab-btn-about" data-tab="about" aria-selected="false">서비스 소개</button>
+  </div>
+
+  <div id="tab-analyze" role="tabpanel">
   <section id="key-warning" class="banner warning" hidden>
     ⚠️ 공공데이터포털 서비스키가 설정되지 않았습니다. <code>.env</code>의 <code>MOLIT_SERVICE_KEY</code>를
     채운 뒤 서버를 재시작하세요.
@@ -181,6 +186,161 @@
     <div id="pyeong-filter" class="pyeong-filter"></div>
     <div id="pyeong-list"></div>
   </section>
+  </div>
+
+  <div id="tab-about" class="about" role="tabpanel" hidden>
+  <section>
+    <h2>아빠, 이 집 이 가격에 사도 될까?</h2>
+    <p class="lead">
+      아빠트는 국토교통부 실거래가 공공데이터로 아파트 평형별 적정가를 추정해 주는 웹앱입니다.
+      단지 이름만 입력하면 최근 거래 흐름과 지금 시세가 적정한지 한눈에 볼 수 있습니다.
+    </p>
+    <button type="button" class="about-cta" data-tab="analyze">단지 검색하러 가기</button>
+  </section>
+
+  <section>
+    <h3>왜 만들었나요?</h3>
+    <!-- TODO(작성자): 아래는 코드와 브랜드 문구로 쓴 초안입니다. 실제 만든 계기로 바꿔 주세요. -->
+    <p>
+      집을 살 때 가장 어려운 질문은 "이 가격이 맞는 걸까?"입니다. 그런데 주변에 물어볼 사람이 마땅치 않고,
+      부동산 앱에는 가격이 많이 보이지만 그게 적정한지는 알려주지 않습니다.
+    </p>
+    <p>
+      그래서 아빠처럼 꼼꼼하게, 숫자로 확인해 주는 도구를 만들었습니다. 매물 광고가 아니라
+      실제로 거래된 가격을 기준으로 지금 가격을 판단하는 것이 아빠트의 출발점입니다.
+    </p>
+  </section>
+
+  <section>
+    <h3>다른 부동산 사이트와 이렇게 다릅니다</h3>
+    <div class="about-compare">
+      <div class="about-compare-row about-compare-head">
+        <div></div><div>일반 부동산 사이트</div><div>아빠트</div>
+      </div>
+      <div class="about-compare-row">
+        <div class="k">기준 가격</div>
+        <div>매물 호가 (파는 사람이 부른 가격)</div>
+        <div>국토교통부 실거래가 (실제로 거래된 가격)</div>
+      </div>
+      <div class="about-compare-row">
+        <div class="k">가격 판단</div>
+        <div>가격을 보여주고 판단은 사용자 몫</div>
+        <div>최근 3년 거래를 가중회귀로 분석해 적정가 추정</div>
+      </div>
+      <div class="about-compare-row">
+        <div class="k">호가와 비교</div>
+        <div>호가끼리 비교</div>
+        <div>호가를 입력하면 적정가 대비 급매·협상 여지를 판단</div>
+      </div>
+      <div class="about-compare-row">
+        <div class="k">단지 확인</div>
+        <div>이름이 비슷한 단지가 섞이기 쉬움</div>
+        <div>검색 후 후보 단지를 한 번 더 확인해 오매칭 방지</div>
+      </div>
+      <div class="about-compare-row">
+        <div class="k">한 곳에서</div>
+        <div>시세, 전세, 단지 정보, 비용 계산을 따로 찾아봄</div>
+        <div>적정가, 전세가율, 단지 정보, 매수 비용을 한 화면에서</div>
+      </div>
+    </div>
+    <p style="margin-top: 12px; font-size: 13px; color: var(--muted);">
+      일반 부동산 사이트는 대체로 매물 중개를 중심으로 하는 서비스를 가리키며, 서비스마다 제공 기능은 다를 수 있습니다.
+    </p>
+  </section>
+
+  <section>
+    <h3>이런 분께 도움이 됩니다</h3>
+    <div class="about-grid">
+      <div class="about-card">
+        <div class="icon">🏠</div>
+        <h4>첫 집을 알아보는 분</h4>
+        <p>호가가 비싼지 싼지 기준이 없을 때, 실거래가 기준의 숫자로 출발점을 잡을 수 있습니다.</p>
+      </div>
+      <div class="about-card">
+        <div class="icon">🤝</div>
+        <h4>가격 협상을 앞둔 분</h4>
+        <p>부른 가격이 추정 적정가보다 얼마나 높은지 알면 협상 근거가 생깁니다.</p>
+      </div>
+      <div class="about-card">
+        <div class="icon">🔍</div>
+        <h4>예산 안에서 단지를 찾는 분</h4>
+        <p>단지를 아직 못 정했다면 예산과 환금성 조건으로 후보부터 좁혀볼 수 있습니다.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h3>무엇을 볼 수 있나요?</h3>
+    <div class="about-grid">
+      <div class="about-card">
+        <div class="icon">📈</div>
+        <h4>평형별 추정 적정가</h4>
+        <p>최근 3년 실거래가에 최신 거래일수록 큰 가중치를 둔 가중회귀로 오늘 시점의 적정가를 추정합니다.</p>
+      </div>
+      <div class="about-card">
+        <div class="icon">🏔️</div>
+        <h4>직전거래가 · 전고점</h4>
+        <p>가장 최근 거래가와 최근 3년 전고점을 비교해 지금 가격이 어디쯤인지 보여줍니다.</p>
+      </div>
+      <div class="about-card">
+        <div class="icon">💰</div>
+        <h4>전세가율</h4>
+        <p>최근 1년 전월세 실거래를 바탕으로 전세가율을 계산해 갭투자 여지를 가늠할 수 있습니다.</p>
+      </div>
+      <div class="about-card">
+        <div class="icon">🏗️</div>
+        <h4>단지 기본정보</h4>
+        <p>세대수, 동수, 준공연도, 건폐율, 용적률, 총 주차대수를 공공데이터에서 자동으로 불러옵니다.</p>
+      </div>
+      <div class="about-card">
+        <div class="icon">🏆</div>
+        <h4>환금성 순위</h4>
+        <p>시군구와 가격대를 입력하면 최근 1년 거래가 활발한 단지 순으로 보여줍니다.</p>
+      </div>
+      <div class="about-card">
+        <div class="icon">🎯</div>
+        <h4>예산 스크리닝</h4>
+        <p>가진 예산을 입력하면 그 안에서 살 수 있는 단지를 조건으로 찾아볼 수 있습니다.</p>
+      </div>
+      <div class="about-card">
+        <div class="icon">🧾</div>
+        <h4>매수 비용 계산기</h4>
+        <p>중개수수료 상한액과 취득세를 함께 계산해 실제로 필요한 돈을 미리 가늠해 보세요.</p>
+      </div>
+      <div class="about-card">
+        <div class="icon">🏷️</div>
+        <h4>호가 비교</h4>
+        <p>매물 호가를 직접 입력하면 추정 적정가와 비교해 급매인지, 협상 여지가 있는지 판단해 줍니다.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h3>이렇게 사용하세요</h3>
+    <ol class="about-steps">
+      <li>시군구와 아파트 단지명을 입력하고 검색합니다.</li>
+      <li>후보 단지 목록에서 찾는 단지를 확인합니다. 다른 단지와 헷갈리지 않도록 한 번 더 묻습니다.</li>
+      <li>평형별 추정 적정가, 직전거래가, 전세가율을 확인합니다.</li>
+      <li>네이버 부동산 등에서 본 호가를 입력해 적정가와 비교합니다.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h3>데이터와 한계</h3>
+    <div class="about-note">
+      <ul>
+        <li>데이터는 국토교통부 실거래가, 전월세 실거래가, 공동주택 단지 정보, 건축물대장을 기반으로 합니다.</li>
+        <li>적정가는 과거 실거래가로 계산한 <strong>추정치</strong>입니다. 층, 향, 동, 상태, 급매 여부는 반영되지 않습니다.</li>
+        <li>실시간 매물과 호가는 자동으로 가져오지 않습니다. 직접 입력한 값만 비교에 쓰입니다.</li>
+        <li>투자 판단과 그 결과에 대한 책임은 사용자에게 있으며, 이 서비스는 참고 자료입니다.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section style="margin-top: 36px;">
+    <button type="button" class="about-cta" data-tab="analyze">지금 검색해 보기</button>
+  </section>
+  </div>
 </main>
 
 <template id="pyeong-card-template">
@@ -225,5 +385,29 @@
 </template>
 
 <script src="/app.js?v=20"></script>
+<script>
+  // 탭 전환: #about 해시로 소개 탭을 바로 열 수 있다.
+  (function () {
+    var panels = { analyze: document.getElementById("tab-analyze"), about: document.getElementById("tab-about") };
+    function show(name) {
+      if (!panels[name]) name = "analyze";
+      Object.keys(panels).forEach(function (k) {
+        panels[k].hidden = k !== name;
+        document.getElementById("tab-btn-" + k).setAttribute("aria-selected", String(k === name));
+      });
+      var h = name === "about" ? "#about" : location.pathname + location.search;
+      if (name === "about" ? location.hash !== "#about" : location.hash) history.replaceState(null, "", h);
+      window.scrollTo(0, 0);
+    }
+    document.addEventListener("click", function (e) {
+      var t = e.target.closest("[data-tab]");
+      if (t) show(t.getAttribute("data-tab"));
+    });
+    window.addEventListener("hashchange", function () {
+      show(location.hash === "#about" ? "about" : "analyze");
+    });
+    show(location.hash === "#about" ? "about" : "analyze");
+  })();
+</script>
 </body>
 </html>

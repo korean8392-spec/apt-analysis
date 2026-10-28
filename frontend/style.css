@@ -223,7 +223,8 @@ main {
 .hero-feature:nth-child(2) .hero-feature-icon { background: #fff1e3; }
 .hero-feature:nth-child(3) .hero-feature-icon { background: #e6faf3; }
 .hero-feature:nth-child(4) .hero-feature-icon { background: #f1e9ff; }
-.hero-feature-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.01em; }
+.hero-feature { color: var(--text); }
+.hero-feature-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.01em; color: var(--text); }
 .hero-feature-desc { font-size: 13px; color: var(--muted); line-height: 1.6; }
 
 .summary-card {

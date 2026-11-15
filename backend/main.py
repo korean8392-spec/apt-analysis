@@ -34,7 +34,9 @@ def _startup():
     db.init_db()
 
 
-@app.get("/api/health")
+# 외부 감시 서비스(UptimeRobot 등)가 주기적으로 호출해 무료 서버가 잠들지 않게 하는 용도라,
+# HEAD로 확인하는 서비스도 정상으로 인식되도록 GET과 HEAD를 모두 받는다.
+@app.api_route("/api/health", methods=["GET", "HEAD"])
 def health():
     return {"ok": True, "molit_key_configured": has_molit_key()}
 

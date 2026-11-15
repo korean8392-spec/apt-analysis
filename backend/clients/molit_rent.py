@@ -8,6 +8,7 @@ from datetime import date
 from xml.etree import ElementTree
 import httpx
 
+from clients.http_retry import get_with_retry, gather_months
 from config import MOLIT_SERVICE_KEY
 import db
 
@@ -52,9 +53,8 @@ async def _fetch_month(lawd_cd: str, deal_ymd: str) -> list[dict]:
         "numOfRows": "1000",
         "pageNo": "1",
     }
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.get(BASE_URL, params=params)
-        resp.raise_for_status()
+    resp = await get_with_retry(BASE_URL, params)
+    resp.raise_for_status()
 
     try:
         root = ElementTree.fromstring(resp.text)
@@ -107,8 +107,4 @@ def _last_n_months(n: int) -> list[str]:
 
 async def get_rents(lawd_cd: str, months: int = 12) -> list[dict]:
     """최근 N개월 전월세 실거래 내역을 가져온다. 전세가율은 최근 1년이면 충분해 기본값을 12개월로 둔다."""
-    all_rows: list[dict] = []
-    for ymd in _last_n_months(months):
-        rows = await _fetch_month(lawd_cd, ymd)
-        all_rows.extend(rows)
-    return all_rows
+    return await gather_months(_fetch_month, lawd_cd, _last_n_months(months))

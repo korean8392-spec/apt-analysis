@@ -29,7 +29,8 @@ def _trade_date(row: dict) -> date | None:
 
 async def screen_by_budget(sigungu_keyword: str, max_price_10k: float, top_n: int = POOL_SIZE) -> dict:
     sigungu = dong_codes.resolve_sigungu(sigungu_keyword)
-    trades = await molit_trade.get_trades(sigungu["code"], months=36)
+    # 계산에는 최근 1년(ONE_YEAR_DAYS) 거래만 쓰므로 12개월 + 현재 달만 받는다.
+    trades = await molit_trade.get_trades(sigungu["code"], months=13)
 
     cutoff_1y = date.today() - timedelta(days=ONE_YEAR_DAYS)
 

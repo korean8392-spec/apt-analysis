@@ -1,4 +1,5 @@
 import logging
+import re
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
@@ -15,15 +16,27 @@ logger = logging.getLogger("appt")
 app = FastAPI(title="네이버 아파트 분석")
 
 
+_SECRET_RE = re.compile(r"(serviceKey|appkey|KakaoAK)[=\s]*[^&\s'\"]+", re.IGNORECASE)
+
+
+def _redact(text: str) -> str:
+    # 공공데이터/카카오 키가 로그나 화면에 새지 않게 가린다.
+    return _SECRET_RE.sub(lambda m: f"{m.group(1)}=***", text)
+
+
 def _network_error(e: Exception, context: str) -> HTTPException:
     # 정부/카카오 API 쪽 일시적 네트워크 오류(ConnectTimeout 등)가 여기로 흘러든다 —
-    # 재시도하면 대부분 바로 해결되는 것을 실제로 확인했다. 사용자에게는 원인을
-    # 자세히 노출하지 않고, 서버 로그에만 원인 파악용 스택트레이스를 남긴다.
+    # 재시도하면 대부분 바로 해결되는 것을 실제로 확인했다. 사용자에게는 자세한 원인 대신
+    # 오류 종류(클래스 이름)만 알려주고(키가 들어 있을 수 있는 메시지/주소는 숨김), 서버 로그에는
+    # 키를 가린 메시지와 스택트레이스를 남긴다.
     url = getattr(getattr(e, "request", None), "url", None)
-    logger.exception("%s failed unexpectedly: url=%s", context, url)
+    logger.error(
+        "%s failed unexpectedly: %s: %s url=%s",
+        context, type(e).__name__, _redact(str(e)), _redact(str(url)) if url else None,
+    )
     return HTTPException(
         status_code=503,
-        detail="일시적인 네트워크 오류로 조회에 실패했습니다. 잠시 후 다시 시도해주세요.",
+        detail=f"일시적인 네트워크 오류로 조회에 실패했습니다. 잠시 후 다시 시도해주세요. (오류 종류: {type(e).__name__})",
     )
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"

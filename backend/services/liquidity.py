@@ -28,7 +28,9 @@ async def rank_liquidity(
     top_n: int = 10,
 ) -> dict:
     sigungu = dong_codes.resolve_sigungu(sigungu_keyword)
-    trades = await molit_trade.get_trades(sigungu["code"], months=36)
+    # 순위는 최근 PERIOD_MONTHS(12개월) 거래만 쓰므로 그만큼(+현재 달)만 받는다. 예전에는 36개월을
+    # 받아 필요한 것의 3배를 호출했다. 월별 캐시는 다른 기능과 공유되어 중복 호출도 없다.
+    trades = await molit_trade.get_trades(sigungu["code"], months=PERIOD_MONTHS + 1)
 
     cutoff = date.today() - timedelta(days=PERIOD_MONTHS * 30)
 

@@ -1,5 +1,7 @@
 import logging
+import os
 import re
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
@@ -7,7 +9,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import db
-from config import has_molit_key
+import httpx
+from config import MOLIT_SERVICE_KEY, has_molit_key
 from services import complex_search, liquidity, screening, summary
 
 logging.basicConfig(level=logging.INFO)
@@ -55,7 +58,48 @@ def _startup():
 # HEAD로 확인하는 서비스도 정상으로 인식되도록 GET과 HEAD를 모두 받는다.
 @app.api_route("/api/health", methods=["GET", "HEAD"])
 def health():
-    return {"ok": True, "molit_key_configured": has_molit_key()}
+    # RENDER_GIT_COMMIT은 Render가 배포 시 자동으로 넣어주는 값이라, 지금 서버가 어떤 커밋인지 확인할 수 있다.
+    return {
+        "ok": True,
+        "molit_key_configured": has_molit_key(),
+        "commit": os.getenv("RENDER_GIT_COMMIT", "")[:7] or None,
+    }
+
+
+_diag_cache: dict = {"at": 0.0, "data": None}
+
+
+@app.get("/api/diag/molit")
+async def diag_molit():
+    """국토부 실거래 API에 지금 연결이 되는지 한 번 확인한다(연결 문제 진단용).
+
+    키나 주소는 응답에 넣지 않고, 외부 호출을 남용당하지 않도록 60초 동안은 이전 결과를 재사용한다."""
+    now = time.time()
+    if _diag_cache["data"] and now - _diag_cache["at"] < 60:
+        return {**_diag_cache["data"], "cached": True}
+    from datetime import date
+
+    ym = f"{date.today().year}{date.today().month:02d}"
+    started = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=10.0)) as client:
+            resp = await client.get(
+                "https://apis.data.go.kr/1613000/RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade",
+                params={"serviceKey": MOLIT_SERVICE_KEY, "LAWD_CD": "11680", "DEAL_YMD": ym, "numOfRows": "1", "pageNo": "1"},
+            )
+        code = re.search(r"<resultCode>(.*?)</resultCode>", resp.text)
+        msg = re.search(r"<(?:resultMsg|returnAuthMsg)>(.*?)</(?:resultMsg|returnAuthMsg)>", resp.text)
+        data = {
+            "ok": resp.status_code == 200 and code is not None and code.group(1) == "000",
+            "http_status": resp.status_code,
+            "result_code": code.group(1) if code else None,
+            "result_msg": _redact(msg.group(1)) if msg else None,
+            "seconds": round(time.time() - started, 2),
+        }
+    except Exception as e:  # noqa: BLE001 - 진단용이라 어떤 오류든 종류만 알려준다
+        data = {"ok": False, "error": type(e).__name__, "seconds": round(time.time() - started, 2)}
+    _diag_cache.update(at=time.time(), data=data)
+    return {**data, "cached": False}
 
 
 @app.get("/api/find-complex")

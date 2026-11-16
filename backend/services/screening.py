@@ -30,7 +30,9 @@ def _trade_date(row: dict) -> date | None:
 async def screen_by_budget(sigungu_keyword: str, max_price_10k: float, top_n: int = POOL_SIZE) -> dict:
     sigungu = dong_codes.resolve_sigungu(sigungu_keyword)
     # 계산에는 최근 1년(ONE_YEAR_DAYS) 거래만 쓰므로 12개월 + 현재 달만 받는다.
-    trades = await molit_trade.get_trades(sigungu["code"], months=13)
+    trades, missing_months, first_error = await molit_trade.get_trades_partial(sigungu["code"], months=13)
+    if not trades and first_error is not None:
+        raise first_error
 
     cutoff_1y = date.today() - timedelta(days=ONE_YEAR_DAYS)
 
@@ -100,4 +102,5 @@ async def screen_by_budget(sigungu_keyword: str, max_price_10k: float, top_n: in
         "max_price_10k": max_price_10k,
         "total_matched_complexes": len(candidates),
         "candidates": top,
+        "missing_months": missing_months,
     }

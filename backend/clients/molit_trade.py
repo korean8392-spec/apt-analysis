@@ -10,7 +10,7 @@ from datetime import date
 from xml.etree import ElementTree
 import httpx
 
-from clients.http_retry import get_with_retry, gather_months
+from clients.http_retry import get_with_retry, gather_months, gather_months_partial
 from config import MOLIT_SERVICE_KEY
 import db
 
@@ -109,3 +109,8 @@ def _last_n_months(n: int) -> list[str]:
 async def get_trades(lawd_cd: str, months: int = 36) -> list[dict]:
     """최근 N개월 실거래가 내역을 모두 가져온다 (해제신고 건 포함, cancel_deal 플래그로 표시)."""
     return await gather_months(_fetch_month, lawd_cd, _last_n_months(months))
+
+
+async def get_trades_partial(lawd_cd: str, months: int = 13) -> tuple[list[dict], list[str], Exception | None]:
+    """get_trades와 같지만 일부 달을 못 받아도 받은 만큼 돌려준다: (거래 목록, 못 받은 달, 첫 오류)."""
+    return await gather_months_partial(_fetch_month, lawd_cd, _last_n_months(months))

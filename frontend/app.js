@@ -1127,6 +1127,15 @@ function renderChart(canvas, v) {
   });
 }
 
+// 국토부 응답이 불안정해 일부 달을 못 받았을 때, 건수가 실제보다 적게 나올 수 있음을 알린다.
+function missingMonthsNote(data) {
+  const missing = data.missing_months || [];
+  if (!missing.length) return "";
+  const label = missing.map((m) => `${m.slice(0, 4)}.${m.slice(4)}`).join(", ");
+  return `<div class="banner warning" style="margin:10px 0 0">⚠️ 국토부 서버 응답이 느려 ${missing.length}개월(${label})은 아직 받지 못했어요.
+    그 달의 거래는 빠져 있어 건수가 실제보다 적게 나올 수 있습니다. 잠시 뒤에 다시 눌러 보세요(받은 달은 저장돼서 더 빨리 완성돼요).</div>`;
+}
+
 function renderLiquidityRanking(data) {
   const resultEl = $("#liquidity-result");
   if (!data.ranking.length) {
@@ -1146,6 +1155,7 @@ function renderLiquidityRanking(data) {
     )
     .join("");
   resultEl.innerHTML = `
+    ${missingMonthsNote(data)}
     <p class="hint" style="margin:8px 0 0">
       ${data.sigungu.sido} ${data.sigungu.sigungu} · 최근 ${data.period_months}개월 기준, 조건에 맞는 단지 ${data.total_matched_complexes}곳 중 상위 ${data.ranking.length}곳
       · 단지를 클릭하면 상세 정보로 이동합니다
@@ -1330,6 +1340,7 @@ async function runBudgetScreening() {
         추정 대출 한도(DSR 40% 기준) <b>${fmtWon(Math.round(loanCapacity))}</b> · 보유 현금 ${fmtWon(cash)}
         → 총 예산 <b>${fmtWon(Math.round(budget))}</b>
       </div>
+      ${missingMonthsNote(data)}
       <p class="hint" style="margin:8px 0 0">${data.sigungu.sido} ${data.sigungu.sigungu} · 예산 내 최근 1년 거래 있는 단지 ${data.total_matched_complexes}곳 중 거래량 상위 ${budgetCandidates.length}곳 · 단지를 클릭하면 상세 정보로 이동합니다</p>
       ${tabsHtml}
       <div id="budget-candidate-list" class="candidate-card-list"></div>

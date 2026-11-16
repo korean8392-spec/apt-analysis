@@ -30,7 +30,12 @@ async def rank_liquidity(
     sigungu = dong_codes.resolve_sigungu(sigungu_keyword)
     # 순위는 최근 PERIOD_MONTHS(12개월) 거래만 쓰므로 그만큼(+현재 달)만 받는다. 예전에는 36개월을
     # 받아 필요한 것의 3배를 호출했다. 월별 캐시는 다른 기능과 공유되어 중복 호출도 없다.
-    trades = await molit_trade.get_trades(sigungu["code"], months=PERIOD_MONTHS + 1)
+    # 국토부 응답이 불안정할 때 일부 달이 빠져도 받은 만큼 보여주고, 빠진 달은 화면에 알린다.
+    trades, missing_months, first_error = await molit_trade.get_trades_partial(
+        sigungu["code"], months=PERIOD_MONTHS + 1
+    )
+    if not trades and first_error is not None:
+        raise first_error
 
     cutoff = date.today() - timedelta(days=PERIOD_MONTHS * 30)
 
@@ -78,4 +83,5 @@ async def rank_liquidity(
         "price_max_10k": price_max_10k,
         "ranking": ranking[:top_n],
         "total_matched_complexes": len(ranking),
+        "missing_months": missing_months,
     }

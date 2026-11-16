@@ -29,7 +29,11 @@ def _network_error(e: Exception, context: str) -> HTTPException:
     # 재시도하면 대부분 바로 해결되는 것을 실제로 확인했다. 사용자에게는 자세한 원인 대신
     # 오류 종류(클래스 이름)만 알려주고(키가 들어 있을 수 있는 메시지/주소는 숨김), 서버 로그에는
     # 키를 가린 메시지와 스택트레이스를 남긴다.
-    url = getattr(getattr(e, "request", None), "url", None)
+    try:
+        # httpx 예외의 request는 값이 없으면 AttributeError가 아니라 RuntimeError를 던진다.
+        url = e.request.url if hasattr(e, "request") else None
+    except RuntimeError:
+        url = None
     logger.error(
         "%s failed unexpectedly: %s: %s url=%s",
         context, type(e).__name__, _redact(str(e)), _redact(str(url)) if url else None,
